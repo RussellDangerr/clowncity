@@ -316,7 +316,7 @@
       <div class="rule"></div>
       <div class="sub">A&nbsp;&nbsp;UNICYCLE&nbsp;&nbsp;AUTO-RUNNER</div>
       <div class="cta">&#9656;&nbsp; PRESS <span>START</span> &nbsp;&#9666;</div>
-      <div class="hint">steer &#9666;&#9656; &nbsp;&middot;&nbsp; tap to jump &nbsp;&middot;&nbsp; tap your heading to spray</div>
+      <div class="hint" id="hint"></div>
     </div>
   </div>
 
@@ -338,6 +338,8 @@
     (function () {
       var splash = document.getElementById('splash');
       var marquee = document.getElementById('marquee');
+      // Controls hint for this device now (Layout keeps it current on resize).
+      document.getElementById('hint').textContent = Layout.hints[Layout.detect()].splash;
 
       // Confetti motes drifting behind everything
       var conf = document.getElementById('confetti');

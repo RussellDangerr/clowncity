@@ -3,8 +3,9 @@
 // _up / tapKey, so Game and Player never know whether a press came from the
 // keyboard, the deck, or the pause menu.
 const Controls = {
-  _state: null,       // last Game.state / Audio.muted pushed to the DOM
+  _state: null,       // last Game.state / Audio.muted / pause-hint scheme pushed to the DOM
   _muted: null,
+  _hintKey: null,
 
   init() {
     this._bindHold('btn-left', 'ArrowLeft');
@@ -56,5 +57,11 @@ const Controls = {
       this._muted = Audio.muted;
       document.getElementById('pm-sound').textContent = `Sound: ${Audio.muted ? 'off' : 'on'}`;
     }
+    // Controls hint: on entering pause, and again if the phone turns mid-pause.
+    const hintKey = state === 'paused' ? Layout.scheme : null;
+    if (hintKey && hintKey !== this._hintKey) {
+      document.getElementById('pm-hint').textContent = Layout.hint('pause');
+    }
+    this._hintKey = hintKey;
   },
 };

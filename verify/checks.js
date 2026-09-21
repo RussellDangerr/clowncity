@@ -218,6 +218,25 @@
       assert(Game.state === 'paused', 'deck pause button');
       return 'Esc/button/deck pause; resume, restart, sound, levels';
     },
+    async hints() {
+      for (const s of ['keys', 'touch', 'deck']) {
+        Layout.force = s; Layout.apply();
+        assert(document.getElementById('hint').textContent === Layout.hints[s].splash, `${s}: splash hint`);
+        Game.state = 'levelSelect';
+        let texts = drawTexts().map(t => t.text);
+        assert(texts.includes(Layout.hints[s].select), `${s}: level-select footer`);
+        Audio.muted = true;
+        texts = drawTexts().map(t => t.text);
+        assert(texts.includes(Layout.hints[s].muted), `${s}: mute label`);
+        flat(); Input.tapKey('Escape'); step(1 / 120);
+        assert(document.getElementById('pm-hint').textContent === Layout.hints[s].pause, `${s}: pause-menu hint`);
+      }
+      assert(!/tap your heading/i.test(Layout.hints.touch.splash), 'touch copy must not say "tap your heading"');
+      Game.state = 'levelSelect';
+      Input.tapKey('Escape'); step(0.6);
+      assert(Game.state === 'levelSelect', `Esc on level select → ${Game.state}`);
+      return 'splash, footer, mute, pause hints per scheme; Esc stays';
+    },
     // ── checks added by later tasks go here, in task order ──
   };
 

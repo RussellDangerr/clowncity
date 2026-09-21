@@ -15,6 +15,30 @@ const Layout = {
   },
   deckMinH: 200,      // px — the deck is never shorter than this
 
+  // Copy that depends on how you're playing. One place, so it can't drift.
+  hints: {
+    keys: {
+      splash: 'steer ◂▸ · space to jump · press your heading to spray',
+      select: '← →  choose       SPACE  play',
+      pause:  '← → turn · space jump · press your heading to spray · esc resume',
+      muted:  '[MUTED - M to toggle]',
+    },
+    touch: {
+      splash: 'swipe to turn · tap to jump · swipe your heading to spray',
+      select: 'SWIPE  choose       TAP  play',
+      pause:  'swipe to turn · tap to jump · swipe your heading to spray',
+      muted:  '[MUTED]',
+    },
+    deck: {
+      splash: '◀ ▶ to turn · jump · press your heading to spray',
+      select: '◀ ▶  choose       JUMP  play',
+      pause:  '◀ ▶ turn · JUMP jump · press your heading to spray',
+      muted:  '[MUTED]',
+    },
+  },
+
+  hint(key) { return this.hints[this.scheme][key]; },
+
   get mode() { return this.scheme === 'deck' ? 'deck' : 'normal'; },
 
   init() {
@@ -38,6 +62,9 @@ const Layout = {
     const v = this.views[this.mode];
     if (Engine.width !== v.w || Engine.height !== v.h) Engine.setView(v.w, v.h);
     Camera.lookaheadX = v.lookahead;
+
+    const hint = document.getElementById('hint');
+    if (hint) hint.textContent = this.hint('splash');
 
     // CSS size: fit the view. A hidden preview pane reports 0×0 — skip then.
     const vw = window.innerWidth, vh = window.innerHeight;

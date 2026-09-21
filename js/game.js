@@ -181,13 +181,6 @@ const Game = {
         this.fadeFromBlack();
       });
     }
-    // Back to title
-    if (Input.pressed('Escape')) {
-      this.fadeToBlack(() => {
-        this.state = 'title';
-        this.fadeFromBlack();
-      });
-    }
     if (Input.pressed('KeyM')) Audio.toggle();
   },
 
@@ -384,7 +377,7 @@ const Game = {
       ctx.fillStyle = Tokens.rgba(Tokens.color.white, 0.3);
       ctx.font = Tokens.font.xs;
       ctx.textAlign = 'right';
-      ctx.fillText('[MUTED - M to toggle]', Engine.width - 12, 18);
+      ctx.fillText(Layout.hint('muted'), Engine.width - 12, 18);
     }
 
     // Transition overlay
@@ -517,7 +510,7 @@ const Game = {
     // Instructions
     ctx.fillStyle = Tokens.rgba(Tokens.color.inkDim, 0.5);
     ctx.font = Tokens.font.sm;
-    ctx.fillText('SWIPE / ← → to select    TAP / SPACE to play    ESC to go back', Engine.width / 2, Engine.height - 40);
+    ctx.fillText(Layout.hint('select'), Engine.width / 2, Engine.height - 40);
   },
 
   drawHUD(ctx) {
