@@ -237,6 +237,44 @@
       assert(Game.state === 'levelSelect', `Esc on level select → ${Game.state}`);
       return 'splash, footer, mute, pause hints per scheme; Esc stays';
     },
+    async allLevels() {
+      const out = [];
+      for (const s of ['keys', 'deck']) {
+        Layout.force = s; Layout.apply();
+        for (let i = 0; i < Game.totalLevels; i++) {
+          const r = playLevel(i, { lead: 24 });
+          assert(r.result === 'goal', `${s} / ${r.level}: ${r.result}`);
+          out.push(`${s}/${r.level} ${r.time}s`);
+        }
+      }
+      return out.join(' · ');
+    },
+    // Warning = time from an obstacle entering the view to the moment Bozo acts
+    // on it. Cruise speed must give >= 1.0s in deck mode; overspeed is reported.
+    async warningTime() {
+      const res = {};
+      for (const s of ['keys', 'deck']) {
+        Layout.force = s; Layout.apply();
+        const worst = { cruise: { t: Infinity }, over: { t: Infinity } };
+        for (let i = 0; i < Game.totalLevels; i++) {
+          const right = [];
+          const r = playLevel(i, { lead: 24, log: true, onFrame: () => right.push(Camera.x + Engine.width) });
+          for (const d of r.decisions) {
+            if ((d.why !== 'pit' && d.why !== 'enemy') || d.dir !== 1) continue;
+            const edgeX = d.x + Player.w + 24 + (d.why === 'enemy' ? 24 : 0);
+            const fDecide = Math.round(d.t / Engine.fixedDt);
+            const fSeen = right.findIndex(x => x >= edgeX);
+            if (fSeen < 0 || fSeen > fDecide) continue;
+            const t = +((fDecide - fSeen) * Engine.fixedDt).toFixed(2);
+            const bucket = Math.abs(d.vx) <= 420 ? worst.cruise : worst.over;
+            if (t < bucket.t) Object.assign(bucket, { t, level: r.level, col: Math.floor(edgeX / 32) });
+          }
+        }
+        res[s] = worst;
+      }
+      assert(res.deck.cruise.t >= 1.0, `deck cruise warning ${res.deck.cruise.t}s < 1.0s (${JSON.stringify(res.deck.cruise)})`);
+      return JSON.stringify(res);
+    },
     // ── checks added by later tasks go here, in task order ──
   };
 
