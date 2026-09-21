@@ -46,8 +46,49 @@
     return !!Level._tileGrid[Math.floor(px / S()) + ',' + Math.floor(bodyY / S())];
   }
 
+  const DEFAULTS = { lead: 40, react: 0, wallDelay: 18, wallMode: 'tap', attack: 'spin' };
+
+  // The bot's brain, shared by playLevel (headless) and watchGame (live).
+  // Called once per fixed step while it's free to act; returns what to press
+  // ({ kind: 'jump' | 'swipe', dir, why }) or null. st.cling counts steps
+  // spent clinging to a wall.
+  function think(st, opts) {
+    const dir = Player.travelDir;
+    const feetY = Player.y + Player.h;
+    const front = dir > 0 ? Player.x + Player.w : Player.x;
+
+    if (Player.wallSliding) {
+      if (++st.cling < opts.wallDelay) return null;
+      st.cling = 0;
+      return opts.wallMode === 'swipe'
+        ? { kind: 'swipe', dir: -Player.wallContactDir, why: 'wall' }
+        : { kind: 'jump', why: 'wall' };
+    }
+    st.cling = 0;
+    if (!Player.grounded) return null;
+
+    // Enemy ahead at roughly our height?
+    for (const e of Entities.list) {
+      if (!e.getHazardRect || e.dead) continue;
+      const r = e.getHazardRect();
+      const ahead = dir > 0 ? r.x - front : front - (r.x + r.w);
+      if (ahead > 0 && ahead < opts.lead + 24 && Math.abs((r.y + r.h) - feetY) < 28) {
+        return opts.attack === 'spin' && Player.momentum >= Player.attackThreshold
+          ? { kind: 'swipe', dir, why: 'enemy' }
+          : { kind: 'jump', why: 'enemy' };
+      }
+    }
+    // Pit or wall within `lead` px ahead?
+    for (let d = 2; d <= opts.lead; d += 2) {
+      const px = front + dir * d;
+      if (wallAt(px, feetY - 16)) return { kind: 'jump', why: 'wallAhead' };
+      if (!supported(px, feetY, 2)) return { kind: 'jump', why: 'pit' };
+    }
+    return null;
+  }
+
   window.playLevel = function (idx, opts) {
-    opts = Object.assign({ lead: 40, react: 0, wallDelay: 18, wallMode: 'tap', attack: 'spin', maxSeconds: 120, postSeconds: 3 }, opts);
+    opts = Object.assign({}, DEFAULTS, { maxSeconds: 120, postSeconds: 3 }, opts);
     const dt = Engine.fixedDt;
     const saved = {
       raw: (() => { try { return localStorage.getItem('clowncity_save'); } catch (e) { return null; } })(),
@@ -63,7 +104,8 @@
 
     const queue = [];            // [{at, kind, dir}]
     const deaths = [];
-    let clingFrames = 0, cooldown = 0, lastGroundX = Player.x;
+    const st = { cling: 0 };
+    let cooldown = 0, lastGroundX = Player.x;
     let wasDead = false, result = 'timeout', frame = 0, goalFrame = -1, deathsAtGoal = 0;
     const maxFrames = Math.round(opts.maxSeconds / dt);
 
@@ -80,38 +122,8 @@
 
     function decide() {
       if (Player.dead || cooldown > 0 || goalFrame >= 0) return;   // hands off after the goal
-      const dir = Player.travelDir;
-      const feetY = Player.y + Player.h;
-      const front = dir > 0 ? Player.x + Player.w : Player.x;
-
-      if (Player.wallSliding) {
-        if (++clingFrames >= opts.wallDelay) {
-          if (opts.wallMode === 'swipe') schedule('swipe', -Player.wallContactDir, 'wall');
-          else schedule('jump', 0, 'wall');
-          clingFrames = 0;
-        }
-        return;
-      }
-      clingFrames = 0;
-      if (!Player.grounded) return;
-
-      // Enemy ahead at roughly our height?
-      for (const e of Entities.list) {
-        if (!e.getHazardRect || e.dead) continue;
-        const r = e.getHazardRect();
-        const ahead = dir > 0 ? r.x - front : front - (r.x + r.w);
-        if (ahead > 0 && ahead < opts.lead + 24 && Math.abs((r.y + r.h) - feetY) < 28) {
-          if (opts.attack === 'spin' && Player.momentum >= Player.attackThreshold) schedule('swipe', dir, 'enemy');
-          else schedule('jump', 0, 'enemy');
-          return;
-        }
-      }
-      // Pit or wall within `lead` px ahead?
-      for (let d = 2; d <= opts.lead; d += 2) {
-        const px = front + dir * d;
-        if (wallAt(px, feetY - 16)) { schedule('jump', 0, 'wallAhead'); return; }
-        if (!supported(px, feetY, 2)) { schedule('jump', 0, 'pit'); return; }
-      }
+      const a = think(st, opts);
+      if (a) schedule(a.kind, a.dir, a.why);
     }
 
     try {
@@ -171,5 +183,83 @@
       Game.state = 'levelSelect'; Game.timer = 0;
       setTimeout(() => { Audio.muted = saved.muted; }, 600);   // let queued finale tones fire muted
     }
+  };
+
+  // ── Live play through the REAL on-screen deck ──
+  // Presses ◀ ▶ JUMP with pointer events — a thumb, as far as the page can
+  // tell — from a system inserted before Game, so it runs every fixed step of
+  // whatever is stepping the engine: the live loop (watch it in a visible
+  // pane) or a harness stepping by hand. Plays every level from level select,
+  // continues past LEVEL COMPLETE and the win screen like a player, restores
+  // the save, and resolves { levels: [{ level, time, deaths }] }.
+  // Needs deck mode (touch device held upright, or Layout.force = 'deck').
+  // onEvent(name, info) fires on 'start', 'wallJump', 'launch', 'goal', 'win'.
+  window.watchGame = function (opts) {
+    opts = Object.assign({}, DEFAULTS, { lead: 24, holdSteps: 10, pauseOnScreens: 1.5, onEvent: () => {} }, opts);
+    const el = id => document.getElementById(id);
+    const raw = (() => { try { return localStorage.getItem('clowncity_save'); } catch (e) { return null; } })();
+    const savedSave = JSON.parse(JSON.stringify(Game.save));
+    const st = { cling: 0, started: -1, won: false };
+    const releases = [];                         // [{ id, at }]
+    const levels = [];
+    let step = 0, cooldown = 0, current = -1;
+
+    const press = (id, hold = opts.holdSteps) => {
+      el(id).dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 9, pointerType: 'touch', isPrimary: true }));
+      releases.push({ id, at: step + hold });
+    };
+
+    let finish;
+    const done = new Promise(r => { finish = r; });
+    const driver = {
+      update() {
+        step++;
+        for (let i = releases.length - 1; i >= 0; i--) {
+          if (releases[i].at > step) continue;
+          el(releases[i].id).dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 9, pointerType: 'touch' }));
+          releases.splice(i, 1);
+        }
+        if (Game.transitionDir !== 0) return;              // mid-fade: nothing to press
+        if (cooldown > 0) cooldown--;
+
+        if (Game.state === 'levelSelect') {
+          if (current === -1) { Game._selectedLevel = 0; current = 0; press('btn-jump'); }
+          else if (levels.length === Game.totalLevels) stop();
+        } else if (Game.state === 'playing') {
+          if (Game.currentLevel !== current || levels.length > current) return;
+          if (st.started !== current) { st.started = current; opts.onEvent('start', { level: Level.maps[current].name }); }
+          if (Player.dead || cooldown > 0) return;
+          const a = think(st, opts);
+          if (!a) return;
+          if (a.why === 'wall') opts.onEvent('wallJump', { col: Math.floor(Player.x / 32) });
+          if (Player.overspeed > 0.4) opts.onEvent('launch', { vx: Math.round(Player.vx) });
+          press(a.kind === 'jump' ? 'btn-jump' : (a.dir > 0 ? 'btn-right' : 'btn-left'), a.kind === 'jump' ? opts.holdSteps : 2);
+          cooldown = 13;
+        } else if (Game.state === 'levelComplete') {
+          if (levels.length === current) {
+            levels.push({ level: Level.maps[current].name, time: +Game.levelTimer.toFixed(2), deaths: Player.deathCount });
+            opts.onEvent('goal', levels[levels.length - 1]);
+          }
+          if (Game.timer > opts.pauseOnScreens && !releases.length) { current++; press('btn-jump'); }
+        } else if (Game.state === 'win') {
+          if (!st.won) { st.won = true; opts.onEvent('win', { levels }); }
+          if (Game.timer > opts.pauseOnScreens + 1 && !releases.length) press('btn-jump');
+        }
+      },
+    };
+
+    function stop() {
+      const i = Engine.systems.indexOf(driver);
+      if (i >= 0) Engine.systems.splice(i, 1);
+      Game.save = savedSave;
+      try { if (raw == null) localStorage.removeItem('clowncity_save'); else localStorage.setItem('clowncity_save', raw); } catch (e) {}
+      finish({ levels });
+    }
+
+    Engine.systems.unshift(driver);
+    Game.transitionDir = 0; Game.transitionAlpha = 0;
+    Game.state = 'levelSelect';
+    Input.keys = {}; Input.justPressed = {}; Input.buffer = {}; Input.runDir = 1;
+    return { done, stop };
   };
 })();
