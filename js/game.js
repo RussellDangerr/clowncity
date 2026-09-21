@@ -355,7 +355,8 @@ const Game = {
     if (Input.pressed('Space') || Input.pressed('Enter') || Input.pressed('KeyZ') || Input.tapped()) {
       Audio.uiSelect();
       this.fadeToBlack(() => {
-        this.state = 'title';
+        this.state = 'levelSelect';
+        this.timer = 0;
         this.fadeFromBlack();
       });
     }
@@ -483,7 +484,7 @@ const Game = {
       if (!accessible) {
         // Locked
         ctx.fillStyle = Tokens.rgba(Tokens.color.disabled, 0.4);
-        ctx.font = '20px monospace';
+        ctx.font = Tokens.font.lock;
         ctx.fillText('LOCKED', x + cardW / 2, cardY + 90);
       } else if (complete) {
         // Stats
@@ -647,6 +648,15 @@ const Game = {
     }
   },
 
+  // Set `font`, shrinking its px size if `text` would be wider than maxW.
+  _fitFont(ctx, text, font, maxW) {
+    ctx.font = font;
+    const w = ctx.measureText(text).width;
+    if (w <= maxW) return;
+    const px = parseFloat(font.match(/(\d+(?:\.\d+)?)px/)[1]);
+    ctx.font = font.replace(/\d+(?:\.\d+)?px/, `${Math.floor(px * maxW / w)}px`);
+  },
+
   drawWin(ctx) {
     const grad = ctx.createLinearGradient(0, 0, 0, Engine.height);
     grad.addColorStop(0, Tokens.color.bgDeep);
@@ -664,13 +674,16 @@ const Game = {
     }
 
     ctx.textAlign = 'center';
-    ctx.fillStyle = Tokens.color.goldBright;
-    ctx.font = Tokens.font.win;
-    ctx.fillText('CONGRATULATIONS', Engine.width / 2, Engine.height / 2 - 70);
+    const cx = Engine.width / 2, cy = Engine.height / 2;
+    // Marquee title: gold face over a two-step extrusion, like the splash.
+    this._fitFont(ctx, 'CONGRATULATIONS', Tokens.font.display, Engine.width - 60);
+    ctx.fillStyle = Tokens.color.goldDeep;   ctx.fillText('CONGRATULATIONS', cx, cy - 62);
+    ctx.fillStyle = Tokens.color.goldShade;  ctx.fillText('CONGRATULATIONS', cx, cy - 64);
+    ctx.fillStyle = Tokens.color.goldBright; ctx.fillText('CONGRATULATIONS', cx, cy - 66);
 
     ctx.fillStyle = Tokens.color.ink;
-    ctx.font = Tokens.font.lg;
-    ctx.fillText('You escaped Clown City', Engine.width / 2, Engine.height / 2 - 25);
+    ctx.font = Tokens.font.serif;
+    ctx.fillText('You escaped Clown City', cx, cy - 22);
 
     ctx.fillStyle = Tokens.rgba(Tokens.color.dust, 0.7);
     ctx.font = Tokens.font.body;

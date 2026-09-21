@@ -54,14 +54,18 @@ harlequin / puppet. They are already centralized as data and intentionally
 
 ### Typography
 
-One family (`monospace`), one fixed scale. Every `ctx.font` reads from here.
+A `monospace` scale for the game UI, plus the two marquee faces (loaded by
+`index.html`) for the moments that should match the splash. Every `ctx.font`
+reads from here.
 
 | Token | Value | Used for |
 |-------|-------|----------|
+| `display` | `58px Ewert` | "CONGRATULATIONS" (shrunk to fit narrow views) |
+| `serif` | `bold 20px Cinzel` | win subtitle |
 | `title` | `bold 52px` | "CLOWN CITY" |
-| `win` | `bold 42px` | "CONGRATULATIONS" |
-| `heading` | `bold 28px` | screen titles (SELECT / COMPLETE / PAUSED) |
+| `heading` | `bold 28px` | screen titles (SELECT / COMPLETE) |
 | `cardNum` | `bold 20px` | level-card number |
+| `lock` | `20px` | level-card LOCKED label |
 | `hud` | `bold 18px` | in-game level name |
 | `lg` | `18px` | start prompt, win body |
 | `md` | `16px` | subtitle, win prompt |

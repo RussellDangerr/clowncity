@@ -309,6 +309,28 @@
       }
       return out.join(' · ');
     },
+    async winFlow() {
+      for (const s of ['keys', 'deck']) {
+        Layout.force = s; Layout.apply();
+        Game.transitionDir = 0; Game.transitionAlpha = 0;
+        Game.state = 'win'; Game.timer = 2;
+        const texts = drawTexts();
+        const title = texts.find(t => t.text === 'CONGRATULATIONS');
+        assert(title && /Ewert/.test(title.font), `${s}: win title should use the marquee face (got ${title && title.font})`);
+        Engine.ctx.font = title.font;
+        assert(Engine.ctx.measureText('CONGRATULATIONS').width <= Engine.width - 60, `${s}: win title overflows`);
+        Input.tapKey('Space'); step(1);
+        assert(Game.state === 'levelSelect', `${s}: win → ${Game.state}`);
+      }
+      assert(Tokens.font.lock, 'Tokens.font.lock missing');
+      Engine.ctx.font = Tokens.font.lock;
+      const want = Engine.ctx.font;                       // canvas-normalised form
+      Game.save.levelsComplete = [false, false, false];
+      Game.state = 'levelSelect';
+      const locked = drawTexts().find(t => t.text === 'LOCKED');
+      assert(locked && locked.font === want, `LOCKED should use Tokens.font.lock (got ${locked && locked.font})`);
+      return 'win → level select; Ewert title fits both views; LOCKED tokenised';
+    },
     // ── checks added by later tasks go here, in task order ──
   };
 
