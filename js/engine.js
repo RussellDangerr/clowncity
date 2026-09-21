@@ -9,7 +9,8 @@ const Engine = {
   accumulator: 0,
   lastTime: 0,
   running: false,
-  hitstopTimer: 0,         // freeze frames for impact feel
+  halted: false,           // a harness is stepping systems by hand: keep RAF alive, skip work
+  hitstopTimer: 0,        // freeze frames for impact feel
   flashAlpha: 0,           // screen flash overlay
   flashColor: 'white',
   flashDecay: Tokens.motion.flashDecay,
@@ -41,6 +42,11 @@ const Engine = {
 
   loop(timestamp) {
     if (!this.running) return;
+    if (this.halted) {
+      this.lastTime = timestamp / 1000;
+      requestAnimationFrame(t => this.loop(t));
+      return;
+    }
     const now = timestamp / 1000;
     let frameTime = now - this.lastTime;
     this.lastTime = now;

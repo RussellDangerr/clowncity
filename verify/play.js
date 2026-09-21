@@ -23,6 +23,7 @@
 //   attack     'spin' (swipe your heading) or 'jump' for enemies ahead
 //   log        include the bot's decisions in the result
 //   traceFrom/traceTo  per-frame player state between these times (s)
+//   onFrame    callback(frame) after each step (e.g. sample the camera)
 (function () {
   const S = () => Level.tileSize;
 
@@ -71,7 +72,7 @@
       if (decisions.length < 200) decisions.push({
         t: +(frame * dt).toFixed(2), kind, why,
         x: Math.round(Player.x), col: +(Player.x / S()).toFixed(1), row: +(Player.y / S()).toFixed(1),
-        vx: Math.round(Player.vx), slope: Player.onSlope,
+        vx: Math.round(Player.vx), slope: Player.onSlope, dir: Player.travelDir,
       });
       queue.push({ at: frame + opts.react, kind, dir });
       cooldown = Math.max(opts.react, 1) + 12;   // one decision per obstacle
@@ -126,6 +127,7 @@
           queue.splice(i, 1);
         }
         for (const sys of Engine.systems) if (sys.update) sys.update(dt);
+        if (opts.onFrame) opts.onFrame(frame);
 
         if (opts.traceFrom != null && frame * dt >= opts.traceFrom && frame * dt <= opts.traceTo) {
           trace.push(`${(frame * dt).toFixed(3)} x${Player.x.toFixed(0)} y${Player.y.toFixed(0)} vx${Player.vx.toFixed(0)} vy${Player.vy.toFixed(0)}` +
@@ -156,6 +158,8 @@
         afterGoal: goalFrame >= 0 ? {
           state: Game.state, diedAfterGoal: deaths.length > deathsAtGoal,
           col: Math.floor(Player.x / S()), row: Math.floor(Player.y / S()),
+          x: +Player.x.toFixed(2), y: +Player.y.toFixed(2), vx: +Player.vx.toFixed(2),
+          grounded: Player.grounded, finished: !!Player.finished, hidden: !!Player.hidden,
           offscreenBelow: Player.y > Level.levelHeight,
         } : null,
         stuckAt: result === 'goal' ? null : { col: Math.floor(Player.x / S()), row: Math.floor(Player.y / S()), vx: +Player.vx.toFixed(1) },
