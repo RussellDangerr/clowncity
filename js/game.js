@@ -233,6 +233,7 @@ const Game = {
         Camera.shake(8);
         Engine.flash('white', 0.5);
         Audio.levelComplete();
+        Player.finish(!!Level.maps[this.currentLevel].tent);
 
         // Save progress
         this.totalDeaths += Player.deathCount;

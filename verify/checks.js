@@ -289,6 +289,26 @@
       assert(Game.transitionDir === 1, 'the first Space on level select should start the level');
       return 'click → level select; first Space works';
     },
+    async goalCoast() {
+      const out = [];
+      for (let i = 0; i < Game.totalLevels; i++) {
+        let atGoal = null;
+        const r = playLevel(i, { lead: 24, postSeconds: 5, onFrame: () => {
+          if (!atGoal && Player.finished) atGoal = { x: Player.x, y: Player.y };
+        } });
+        const a = r.afterGoal;
+        assert(r.result === 'goal' && a, `${r.level}: no goal`);
+        assert(atGoal, `${r.level}: Player.finished never set at the goal`);
+        assert(!a.diedAfterGoal, `${r.level}: died after the goal`);
+        if (Level.maps[i].tent) {
+          assert(a.hidden && a.x === +atGoal.x.toFixed(2) && a.y === +atGoal.y.toFixed(2), `${r.level}: Bozo should stay swallowed by the tent`);
+        } else {
+          assert(!a.offscreenBelow && a.grounded && Math.abs(a.vx) < 1, `${r.level}: should coast to a stop (got ${JSON.stringify(a)})`);
+        }
+        out.push(`${r.level} ok`);
+      }
+      return out.join(' · ');
+    },
     // ── checks added by later tasks go here, in task order ──
   };
 

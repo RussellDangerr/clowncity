@@ -163,6 +163,8 @@ const Player = {
   deathCount: 0,
   checkpointX: 0,
   checkpointY: 0,
+  finished: false,          // reached the goal: coasting to a stop, input ignored
+  hidden: false,            // swallowed by the tent (Big Drop finale): not drawn or updated
 
   // ── Hazard hitbox (smaller than platform hitbox for forgiving near-misses) ──
   hazardShrink: 3,          // pixels inset on each side
@@ -223,6 +225,8 @@ const Player = {
     this.lean = 0;
     this.leanTarget = 0;
     this.dead = false;
+    this.finished = false;
+    this.hidden = false;
     this.deathTimer = 0;
     this.respawning = true;
     this.respawnTimer = this.respawnDuration;
@@ -255,6 +259,33 @@ const Player = {
 
   respawn() {
     this.spawn(this.checkpointX, this.checkpointY);
+  },
+
+  // Called by Game on touching the goal. hide = swallowed by the tent.
+  finish(hide) {
+    this.finished = true;
+    this.hidden = !!hide;
+    this.attackDir = 0;
+    this.spinAttackTimer = 0;
+    if (this.hidden) this.trail.length = 0;
+  },
+
+  // Post-goal physics: no input, no hazards — brake to a stop under gravity.
+  _coast(dt) {
+    this.vx = approach(this.vx, 0, this.reverseDecel * dt);
+    const grav = this.vy < 0 ? this.gravityUp : this.gravityDown;
+    this.vy = Math.min(this.vy + grav * dt, this.maxFallSpeed);
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+    this.resolveCollisions();
+    this.wheelAngle += (this.vx / this.wheelRadius) * dt;
+    this.lean += (0 - this.lean) * this.leanRate * dt;
+    this.squash += (1 - this.squash) * 14 * dt;
+    for (let i = this.trail.length - 1; i >= 0; i--) {
+      this.trail[i].alpha -= dt * 2;
+      if (this.trail[i].alpha <= 0) this.trail.splice(i, 1);
+    }
+    this.updateAnim(dt);
   },
 
   setCheckpoint(x, y) {
@@ -296,6 +327,12 @@ const Player = {
         this.respawn();
       }
       this.updateAnim(dt);
+      return;
+    }
+
+    // ── Finished: the goal was reached ──
+    if (this.finished) {
+      if (!this.hidden) this._coast(dt);
       return;
     }
 
@@ -940,8 +977,8 @@ const Player = {
   },
 
   draw(ctx) {
-    // Don't draw during death (particles handle the visual)
-    if (this.dead) return;
+    // Don't draw during death (particles handle the visual) or once swallowed by the tent
+    if (this.dead || this.hidden) return;
 
     // Trail + afterimages
     for (const t of this.trail) {
