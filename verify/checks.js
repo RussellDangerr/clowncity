@@ -331,6 +331,17 @@
       assert(locked && locked.font === want, `LOCKED should use Tokens.font.lock (got ${locked && locked.font})`);
       return 'win → level select; Ewert title fits both views; LOCKED tokenised';
     },
+    async meta() {
+      const q = sel => document.querySelector(sel);
+      assert(q('link[rel="icon"]'), 'favicon link missing');
+      assert(q('meta[name="description"]') && q('meta[name="description"]').content.length > 40, 'description missing');
+      for (const p of ['og:title', 'og:description', 'og:url', 'og:image']) assert(q(`meta[property="${p}"]`), `${p} missing`);
+      assert(q('meta[name="twitter:card"]'), 'twitter:card missing');
+      const img = q('meta[property="og:image"]').content;
+      const res = await fetch('/og.png', { cache: 'no-store' });
+      assert(res.ok && res.headers.get('content-type').includes('png'), 'og.png not served');
+      return `og:image → ${img}`;
+    },
     // ── checks added by later tasks go here, in task order ──
   };
 
