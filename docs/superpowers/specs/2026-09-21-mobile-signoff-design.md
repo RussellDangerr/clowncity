@@ -30,7 +30,7 @@ and re-evaluated on every `resize` (orientation changes fire it):
 | Mode | When | Internal canvas | Camera `lookaheadX` |
 |---|---|---|---|
 | **normal** | everything else (desktop any shape, phone sideways) | 960×540 (unchanged) | 60 (unchanged) |
-| **deck** | touch device held upright (phones, tablets) | **640×480** (4:3, 20 tiles wide) | tuned (≈140) so Bozo sits left of centre |
+| **deck** | touch device held upright (phones, tablets) | **640×480** (4:3, 20 tiles wide) | tuned (≈220) so Bozo sits left of centre |
 
 - `Engine` gains a layout setter that switches `width`/`height`, reassigns the canvas
   bitmap and re-scales. All drawing already reads `Engine.width/height` (no literal
@@ -43,7 +43,10 @@ and re-evaluated on every `resize` (orientation changes fire it):
   mobile browser toolbars (both modes).
 - **No level or physics changes.** Only the view changes; everything the bot proved
   beatable stays beatable. Target: **≥ 1.0s of warning at cruise before every pit and
-  enemy in deck mode** (≈1.15s expected), measured, and `lookaheadX` tuned to meet it.
+  enemy in deck mode**, measured, and `lookaheadX` tuned to meet it. (The camera's
+  smoothing trails a cruising Bozo by ~80px, so today's desktop view gives ≈1.07s,
+  not the 1.35s the no-lag arithmetic suggests; deck mode needs `lookaheadX` ≈ 220
+  to match it.)
 
 ## 2 · Controls
 
