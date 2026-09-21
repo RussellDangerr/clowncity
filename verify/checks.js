@@ -73,6 +73,10 @@
   }
   function press(el) { pointer(el, 'pointerdown'); step(1 / 120); pointer(el, 'pointerup'); }
 
+  function cleanInput() {
+    Input.keys = {}; Input.justPressed = {}; Input.buffer = {}; Input._touches = {}; Input.runDir = 1;
+  }
+
   function snapshot() {
     let raw = null;
     try { raw = localStorage.getItem('clowncity_save'); } catch (e) {}
@@ -88,7 +92,7 @@
     const fi = Level.maps.findIndex(m => m.name === '__flat__');
     if (fi >= 0) Level.maps.splice(fi, 1);
     if (typeof Layout !== 'undefined') { Layout.force = s.force; Layout.apply(); }
-    Input.keys = {}; Input.justPressed = {}; Input.buffer = {}; Input._touches = {}; Input.runDir = 1;
+    cleanInput();
     Game.transitionDir = 0; Game.transitionAlpha = 0;
     Game.loadLevel(0); Game.state = 'levelSelect'; Game.timer = 0;
   }
@@ -117,6 +121,45 @@
       step(1);
       return 'deck 640x480 + lead, touch/keys 960x540, classes ok';
     },
+    async virtualKeys() {
+      flat(); step(0.5);
+      Input._down('ArrowLeft');
+      assert(Input.runDir === -1 && Input.pressed('ArrowLeft') && Input.held('ArrowLeft'), 'ArrowLeft down');
+      Input._up('ArrowLeft');
+      assert(!Input.held('ArrowLeft'), 'ArrowLeft up');
+      Input._down('Space');
+      assert(Input.jumpBuffered(), 'Space down should buffer a jump');
+      Input.justPressed.Space = false;
+      Input._down('Space');                              // repeat while held: no new edge
+      assert(!Input.pressed('Space'), 'a held key must not re-trigger');
+      Input._up('Space');
+      Input.tapKey('KeyM');
+      assert(Input.pressed('KeyM') && !Input.held('KeyM'), 'tapKey = press + release');
+      return 'down/up/tapKey ok';
+    },
+    async gestureIgnoresUI() {
+      const el = document.createElement('div');
+      el.setAttribute('data-ui', '');
+      document.body.appendChild(el);
+      try {
+        Input.buffer = {};
+        const end = await tap(el);
+        assert(!Input.buffer.Jump, 'a tap that starts on UI must not jump');
+        assert(!end.defaultPrevented, 'UI touchend must not be preventDefault-ed (it would swallow the click)');
+        await tap(document.body);
+        assert(Input.buffer.Jump > 0, 'a tap on the game should still jump');
+      } finally { el.remove(); }
+      return 'UI touches ignored, game taps jump';
+    },
+    async longPressJumps() {
+      Input.buffer = {};
+      await tap(document.body, 400);
+      assert(Input.buffer.Jump > 0, 'a 400ms stationary press should jump');
+      Input.buffer = {};
+      await swipe(document.body, -80);
+      assert(!Input.buffer.Jump && Input.runDir === -1, 'a swipe steers and does not jump');
+      return 'long press jumps, swipe steers';
+    },
     // ── checks added by later tasks go here, in task order ──
   };
 
@@ -136,6 +179,7 @@
       const snap = snapshot();
       Engine.halted = true;
       Audio.muted = true;
+      cleanInput();                                  // every check starts from released keys
       try {
         const detail = await fn();
         results.push({ name, ok: detail === null ? null : true, detail: detail === null ? 'skipped: reload the page, then run it first' : detail });
