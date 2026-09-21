@@ -28,6 +28,7 @@ const Game = {
     Input.init();
     Audio.init();
     Layout.init();
+    Controls.init();
     this.totalLevels = Level.maps.length;
     this.loadSave();
 
@@ -55,6 +56,7 @@ const Game = {
     });
     Engine.register(Camera);
     Engine.register({ draw(ctx) { Game.drawOverlay(ctx); } });
+    Engine.register(Controls);   // syncs the DOM UI to Game.state (before Input, like every consumer)
     Engine.register(Input);
 
     Engine.start();

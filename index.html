@@ -101,6 +101,33 @@
       border-radius: 0;
       box-shadow: 0 2px 0 var(--gold), 0 8px 0 var(--oxblood), 0 9px 0 rgba(232,198,106,0.35);
     }
+    #deck { display: none; }
+    html.deck #deck {
+      display: flex; flex-direction: column; flex: 1; align-self: stretch;
+      position: relative; z-index: 1;
+      padding: 12px 18px calc(18px + env(safe-area-inset-bottom));
+      touch-action: none; -webkit-user-select: none; user-select: none;
+      -webkit-touch-callout: none;
+    }
+    .deck-row { flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .deck-arrows { display: flex; gap: 14px; }
+    .deck-btn {
+      width: 76px; height: 76px; border-radius: 50%;
+      font-family: 'Silkscreen', monospace; font-weight: 700; font-size: 26px;
+      color: var(--gold-brt);
+      background: radial-gradient(circle at 40% 35%, var(--velvet), var(--oxblood) 72%);
+      border: 2px solid var(--gold);
+      box-shadow: 0 0 0 5px var(--oxblood), 0 0 0 6px rgba(232,198,106,0.35), 0 10px 24px -8px #000;
+      touch-action: none; -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none; user-select: none; cursor: pointer;
+      transition: transform .06s ease;
+    }
+    .deck-btn.down { transform: scale(0.92); background: var(--maroon); }
+    .deck-jump { width: 112px; height: 112px; font-size: 18px; letter-spacing: 0.12em; }
+    .deck-pause {
+      align-self: flex-end; width: 64px; height: 64px; border-radius: 14px;
+      font-size: 16px; background: rgba(28,8,11,0.85);
+    }
 
     /* ── Splash / front door ── */
     #splash {
@@ -215,6 +242,17 @@
 
   <canvas id="game"></canvas>
 
+  <div id="deck" data-ui>
+    <button class="deck-btn deck-pause" id="btn-pause" aria-label="Pause">&#10074;&#10074;</button>
+    <div class="deck-row">
+      <div class="deck-arrows">
+        <button class="deck-btn" id="btn-left" aria-label="Turn left">&#9664;</button>
+        <button class="deck-btn" id="btn-right" aria-label="Turn right">&#9654;</button>
+      </div>
+      <button class="deck-btn deck-jump" id="btn-jump" aria-label="Jump">JUMP</button>
+    </div>
+  </div>
+
   <div id="splash">
     <div class="curtain l"></div>
     <div class="curtain r"></div>
@@ -238,6 +276,7 @@
   <script src="js/particles.js"></script>
   <script src="js/audio.js"></script>
   <script src="js/layout.js"></script>
+  <script src="js/controls.js"></script>
   <script src="js/game.js"></script>
 
   <script>

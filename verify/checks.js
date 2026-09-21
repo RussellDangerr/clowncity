@@ -160,6 +160,33 @@
       assert(!Input.buffer.Jump && Input.runDir === -1, 'a swipe steers and does not jump');
       return 'long press jumps, swipe steers';
     },
+    async deckButtons() {
+      Layout.force = 'deck'; Layout.apply();
+      const deck = document.getElementById('deck');
+      const L = document.getElementById('btn-left'), R = document.getElementById('btn-right'), J = document.getElementById('btn-jump');
+      assert(deck && L && R && J, 'deck buttons missing');
+      assert(getComputedStyle(deck).display !== 'none', 'deck should show in deck mode');
+      flat(); step(2.5);                                  // cruising right on flat ground
+      Input.buffer = {};
+      pointer(J, 'pointerdown');
+      assert(Input.jumpBuffered(), 'JUMP should buffer a jump the moment it is pressed');
+      step(1 / 120);
+      assert(Player.vy < 0, 'JUMP press should jump immediately');
+      pointer(J, 'pointerup');
+      assert(!Input.held('Space'), 'JUMP release');
+      step(1.2);
+      Input.buffer = {};
+      await tap(J);                                       // the touch side of a JUMP press
+      assert(!Input.buffer.Jump, 'a touch on JUMP must not ALSO count as a gesture tap');
+      press(L);
+      assert(Input.runDir === -1 && Player.runState === 'brake', '◀ should start a reversal');
+      step(1.5);
+      press(R);
+      assert(Input.runDir === 1, '▶ should steer right');
+      Layout.force = 'keys'; Layout.apply();
+      assert(getComputedStyle(deck).display === 'none', 'deck must hide outside deck mode');
+      return 'jump instant, no double-fire, turn both ways, hidden on desktop';
+    },
     // ── checks added by later tasks go here, in task order ──
   };
 
