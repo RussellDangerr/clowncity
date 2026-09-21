@@ -9,8 +9,9 @@ Play it live at [clowncity.russelldangerr.com](https://clowncity.russelldangerr.
 
 ## Status
 
-v0.4.0 — three levels (The Big Top, The Catwalk, The Big Drop) with rideable
-slopes, wall-jump climbs, and a big-top finale. Mobile-playable.
+v0.5.0 — three levels (The Big Top, The Catwalk, The Big Drop) with rideable
+slopes, wall-jump climbs, and a big-top finale. Plays on phones held upright
+(on-screen controls) or sideways (swipe and tap), and on desktop.
 
 ## Play
 
@@ -18,23 +19,25 @@ Open `index.html` in a browser. No build step required.
 
 ## Controls
 
-| Action | Touch | Keyboard |
-|--------|-------|----------|
-| Steer / reverse | Swipe left / right | ← → or A / D |
-| Jump | Tap | Space / ↑ / W |
-| Pause | — | Esc / P |
-| Restart | — | R |
+| Action | Phone, upright | Phone, sideways | Keyboard |
+|--------|----------------|-----------------|----------|
+| Steer / reverse | ◀ ▶ buttons | Swipe left / right | ← → or A / D |
+| Jump | JUMP button | Tap | Space / ↑ / W |
+| Spray confetti | Press the arrow you're heading | Swipe the way you're heading | Press the arrow you're heading |
+| Pause (restart, levels, sound) | ❚❚ button | ❚❚ corner button | Esc / P |
 
 Reversing is a **weighty** turnaround: Bozo decelerates, pauses, then accelerates
 the other way. The braking lunge — the wheel kicking out in the *old* direction —
-is the attack. You can also **stomp** enemies from above. A pit fall, or touching
-an enemy from the side, is fatal.
+is an attack, and pressing the way you're already heading sprays confetti that
+kills whatever it lands on (it costs speed). You can also **stomp** enemies from
+above. A pit fall, or touching an enemy from the side, is fatal.
 
 ## Features
 
 - Bidirectional auto-runner with weighty unicycle momentum and a start-of-level speed ramp
-- Swipe / tap touch controls (plus keyboard parity) — fully mobile-playable
-- Brake-kick + stomp combat
+- Phone-first controls: an on-screen deck when held upright, swipe / tap when sideways,
+  full keyboard parity, and a tappable pause menu
+- Brake-lunge, confetti-spray and stomp combat
 - Treadmill surfaces that cap speed at 0.5 and bleed momentum
 - Rideable 45° slopes — bomb downhill to bank "overspeed" that powers a bigger jump
 - Wall-slide / wall-jump shafts and an elevated catwalk traverse

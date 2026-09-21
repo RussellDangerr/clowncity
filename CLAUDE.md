@@ -13,11 +13,16 @@ in a browser to run; deployed live at clowncity.russelldangerr.com (main → Clo
   single-frame flag clear runs after all consumers read them. **`Input` is a
   top-level `const`, NOT a window property** — `window.Input = fake` is a no-op
   in any harness; mutate `Input.runDir` / `Input.buffer` directly.
-- Fixed internal canvas 960×540, CSS-scaled to fit.
+- Internal canvas **960×540** normally, **640×480 in deck mode** (touch device held
+  upright), chosen by `Layout` (layout.js) and CSS-scaled to fit. All drawing reads
+  `Engine.width/height`; never hardcode the size.
 
 ## Key files
 - `js/player.js` — Bozo. Unicycle **momentum state machine** (`ramp`→`cruise`→`brake`),
-  `approach()` helper, brake-kick + stomp combat in `checkHazards()`/`getAttackRect()`.
+  `approach()` helper. Combat = brake-lunge, spin-out spray (the lethal confetti IS the
+  hitbox) and stomp, in `checkHazards()`; wall slide / wall-jump / rev-climb. A wall-jump
+  and `spawn()` sync `Input.runDir` (else the sticky steer U-turns Bozo). `finish()` at
+  the goal → coast to a stop (`hidden` for the tent).
   `facing` is frozen (always faces one way); `travelDir` is the real direction.
   `resolveCollisions()` X-pass uses a **`stepTolerance` guard** (`overlapY > 8`) so flat
   floor seams aren't misread as walls — that was snagging momentum. Slope tiles live in
@@ -27,8 +32,16 @@ in a browser to run; deployed live at clowncity.russelldangerr.com (main → Clo
   above it) feeding only the speed-scaled jump — keep these separate. The player draws as
   a **procedural unicycle** in `_drawRectFallback()` (spinning wheel + frame + body),
   with a velocity-driven `lean`/`wheelAngle` sway; purely visual, hitbox unchanged.
-- `js/input.js` — keyboard + **touch (swipe = steer via sticky `runDir`, tap = jump)**,
-  `jumpBuffered()/consumeJump()`, plus `tapped()/swipeEdge()` for menu nav.
+- `js/input.js` — keyboard + touch. **Virtual keys** `_down/_up/tapKey(code)`: the
+  keyboard, the deck and the pause menu all press through them. Touch gestures (swipe =
+  steer via sticky `runDir`, any stationary touch = jump) ignore touches that start on
+  `[data-ui]` elements. `jumpBuffered()/consumeJump()`, `tapped()/swipeEdge()` for menus.
+- `js/layout.js` — picks the scheme (`deck` / `touch` / `keys`) and mode, sizes the
+  canvas, sets `Camera.lookaheadX`, owns all input-dependent hint copy (`Layout.hint`).
+  `Layout.force` overrides detection for checks.
+- `js/controls.js` — DOM UI: the deck (◀ ▶ JUMP pause), the floating pause button
+  (touch, sideways) and the pause menu, all wired as virtual keys; `update()` syncs the
+  DOM to `Game.state`.
 - `js/level.js` — 3 levels: **The Big Top** (circus, 80 wide — the original intro),
   **The Catwalk** (harlequin, 112 wide — merged Stage+Workshop; mandatory + optional
   wall-jump shafts, elevated catwalk over a death-void with a ferry), **The Big Drop**
@@ -38,7 +51,8 @@ in a browser to run; deployed live at clowncity.russelldangerr.com (main → Clo
   left, 45°). All maps 25 rows tall; floor on rows 22–24, spawn `[3,21]`.
 - `js/entities.js` — `MovingPlatform`, `OneWayPlatform`, `PatrolEnemy`, `Entities.kill()`.
 - `js/game.js` — state machine (title/levelSelect/playing/levelComplete/paused/win/tentFinale),
-  HUD/menus. Level count is dynamic: `Game.totalLevels = Level.maps.length` — don't hardcode.
+  HUD/menus. `title` is only the boot state under the marquee splash (nothing returns to
+  it; the win screen goes back to level select). Level count is dynamic: `Game.totalLevels = Level.maps.length` — don't hardcode.
   `tent: true` on a `Level.maps` entry triggers the tent set-piece + `tentFinale` win state
   (derived from `_cachedGoals[0]`).
 - `js/camera.js` — follow + lookahead keyed to `travelDir`.
@@ -48,12 +62,16 @@ in a browser to run; deployed live at clowncity.russelldangerr.com (main → Clo
 ## Conventions
 - Route colours/fonts/magic-numbers through `Tokens.*` (not new hardcoded literals).
 - Per-level palettes live in `Level.themes` (deliberately separate from `Tokens`).
-- Combat: reversing makes the wheel lunge in the OLD direction = the attack;
-  stomp from above also kills; side/pit contact is fatal.
+- Combat: reversing makes the wheel lunge in the OLD direction = the attack; pressing
+  your current heading sprays; stomp from above also kills; side/pit contact is fatal.
+- New input sources go through `Input` virtual keys, not new game-logic branches. DOM UI
+  that takes touches carries `data-ui`.
 
 ## Tuning knobs (all in `player.js` constants)
-`runSpeed` (300), `startRampTime` (1.5), `reverseDecel`/`reverseAccel`,
-`pauseAtZeroTime`, `treadmillCap` (150), `brakeWindow` (0.18), `jumpForce` (-480).
+`runSpeed` (400), `startRampTime` (1.5), `reverseDecel`/`reverseAccel`,
+`pauseAtZeroTime`, `treadmillCap` (200), `brakeWindow` (0.18), `jumpForce` (-480).
+Combat / walls: `attackThreshold` (0.5), `spinAttackCost` (0.45), `wallSlideSpeed` (120),
+`wallJumpForceY` (-440), `wallJumpPushX` (300), `revClimbSpeed` (280).
 Collision/feel: `stepTolerance` (8, the flat-ground snag guard). Unicycle sway:
 `cruiseLean` (0.10), `brakeLean` (0.14), `leanRate` (10), `wheelRadius` (8).
 Slopes / banked overspeed (Big Drop): `overspeedCap` (720), `slopeAccel` (800),
@@ -61,13 +79,16 @@ Slopes / banked overspeed (Big Drop): `overspeedCap` (720), `slopeAccel` (800),
 launch from −480 cruise to ≈−860 at full overspeed), `slopeSnap` (8).
 
 ## Verifying changes
-No tests. Run `index.html` (e.g. `py -m http.server 8080 --directory .`) and play,
-or use `verify/sim.js` — a headless harness that halts the RAF loop and drives
-`Player.update` directly. Set `Input.runDir` and arm `Input.buffer.Jump = Input.bufferTime`
-to feed input; restore both in `try/finally`. **`preview_screenshot` times out on the live
-RAF canvas** — use `preview_eval` + `ctx.getImageData` pixel sampling for visual checks.
+No test framework. Run `index.html` (the preview server on 8081), then in the page:
+- `verify/checks.js` — `runChecks()` regression checks (layout, deck, pause, hints,
+  goal, win, meta, warning time, all levels in both layouts). Reload the page first.
+- `verify/play.js` — `playLevel(i, opts)` full-level bot through the real engine with
+  touch-equivalent input.
+- `verify/sim.js` — Player-only physics on a scratch map.
+- `verify/og.js` — renders `og.png` (the link preview) from the game's own drawing.
+Harnesses set `Engine.halted` and step `Engine.systems` by hand. **A hidden browser pane
+never fires requestAnimationFrame** (frozen loop, `innerWidth` 0), so screenshots need
+the pane visible, or call each system's `draw` right before capturing.
 
 ## Out of scope / follow-ups
-- Real sprite art (the player is a procedural unicycle now; no spritesheet). On-screen
-  touch **pause** button. The lone non-bold `20px` LOCKED font label (flagged in the
-  audit).
+- Real sprite art (the player is a procedural unicycle now; no spritesheet).
