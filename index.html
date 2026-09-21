@@ -129,6 +129,47 @@
       font-size: 16px; background: rgba(28,8,11,0.85);
     }
 
+    /* ── Floating pause button (touch, sideways) ── */
+    #pause-btn {
+      display: none; position: fixed; z-index: 5;
+      top: calc(8px + env(safe-area-inset-top)); left: calc(8px + env(safe-area-inset-left));
+      width: 64px; height: 64px; border: none; border-radius: 50%;
+      background: radial-gradient(circle, rgba(28,8,11,0.85) 0 19px, var(--gold) 19px 21px, transparent 22px);
+      color: var(--gold-brt); font-size: 13px;
+      touch-action: none; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none;
+    }
+    html.touch:not(.deck) #pause-btn { display: block; }
+
+    /* ── Pause menu (every input) ── */
+    #pause-menu {
+      position: fixed; inset: 0; z-index: 20;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(11,5,7,0.72);
+      touch-action: none; -webkit-user-select: none; user-select: none;
+    }
+    .pm-panel {
+      display: flex; flex-direction: column; gap: 12px; min-width: 250px;
+      padding: 26px 34px 22px; text-align: center; border-radius: 8px;
+      background: radial-gradient(ellipse 90% 80% at 50% 40%, rgba(74,14,18,0.95), rgba(12,6,8,0.97));
+      box-shadow: 0 0 0 2px var(--gold), 0 0 0 7px var(--oxblood), 0 0 0 8px rgba(232,198,106,0.35), 0 30px 80px -20px #000;
+    }
+    .pm-title {
+      font-family: 'Ewert', serif; font-size: 44px; line-height: 1; margin-bottom: 6px;
+      color: var(--gold-brt); text-shadow: 0 2px 0 #b07a1e, 0 4px 0 #6e4a12;
+    }
+    .pm-panel button {
+      min-height: 52px; font-family: 'Cinzel', serif; font-weight: 700; font-size: 16px;
+      letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--ink); background: rgba(74,14,18,0.6);
+      border: 1px solid rgba(232,198,106,0.45); border-radius: 6px; cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .pm-panel button:hover, .pm-panel button:focus-visible { border-color: var(--gold); color: var(--gold-brt); outline: none; }
+    .pm-hint {
+      margin-top: 6px; max-width: 280px; font-family: 'Cinzel', serif; font-size: 11px;
+      letter-spacing: 0.14em; color: var(--ink); opacity: 0.55;
+    }
+
     /* ── Splash / front door ── */
     #splash {
       position: fixed; inset: 0; z-index: 10;
@@ -250,6 +291,19 @@
         <button class="deck-btn" id="btn-right" aria-label="Turn right">&#9654;</button>
       </div>
       <button class="deck-btn deck-jump" id="btn-jump" aria-label="Jump">JUMP</button>
+    </div>
+  </div>
+
+  <button id="pause-btn" data-ui aria-label="Pause" hidden>&#10074;&#10074;</button>
+
+  <div id="pause-menu" data-ui role="dialog" aria-label="Paused" hidden>
+    <div class="pm-panel">
+      <div class="pm-title">Paused</div>
+      <button id="pm-resume">Resume</button>
+      <button id="pm-restart">Restart level</button>
+      <button id="pm-levels">Levels</button>
+      <button id="pm-sound">Sound: on</button>
+      <div class="pm-hint" id="pm-hint"></div>
     </div>
   </div>
 

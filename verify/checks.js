@@ -81,14 +81,13 @@
     let raw = null;
     try { raw = localStorage.getItem('clowncity_save'); } catch (e) {}
     return {
-      raw, save: JSON.parse(JSON.stringify(Game.save)), muted: Audio.muted,
+      raw, save: JSON.parse(JSON.stringify(Game.save)),
       force: typeof Layout !== 'undefined' ? Layout.force : undefined,
     };
   }
   function restore(s) {
     Game.save = s.save;
     try { if (s.raw == null) localStorage.removeItem('clowncity_save'); else localStorage.setItem('clowncity_save', s.raw); } catch (e) {}
-    setTimeout(() => { Audio.muted = s.muted; }, 600);          // let queued SFX fire muted
     const fi = Level.maps.findIndex(m => m.name === '__flat__');
     if (fi >= 0) Level.maps.splice(fi, 1);
     if (typeof Layout !== 'undefined') { Layout.force = s.force; Layout.apply(); }
@@ -187,6 +186,38 @@
       assert(getComputedStyle(deck).display === 'none', 'deck must hide outside deck mode');
       return 'jump instant, no double-fire, turn both ways, hidden on desktop';
     },
+    async pauseMenu() {
+      const menu = document.getElementById('pause-menu');
+      const pb = document.getElementById('pause-btn');
+      const click = id => document.getElementById(id).click();
+      assert(menu && pb, 'pause UI missing');
+      flat(); step(1);
+      Input.tapKey('Escape'); step(1 / 120);
+      assert(Game.state === 'paused' && !menu.hidden, 'Esc should pause and show the menu');
+      click('pm-resume'); step(1 / 120);
+      assert(Game.state === 'playing' && menu.hidden, 'Resume');
+      Layout.force = 'touch'; Layout.apply(); step(1 / 120);
+      assert(!pb.hidden && getComputedStyle(pb).display !== 'none', 'floating pause button should show on touch while playing');
+      pb.click(); step(1 / 120);
+      assert(Game.state === 'paused', 'floating pause button');
+      const x0 = Player.x;
+      click('pm-restart'); step(1 / 120);
+      assert(Game.state === 'playing' && Player.x < x0, 'Restart');
+      Input.tapKey('Escape'); step(1 / 120);
+      const m0 = Audio.muted;
+      click('pm-sound'); step(1 / 120);
+      assert(Audio.muted === !m0, 'Sound should toggle');
+      assert(document.getElementById('pm-sound').textContent === `Sound: ${Audio.muted ? 'off' : 'on'}`, 'Sound label');
+      click('pm-levels'); step(1);
+      assert(Game.state === 'levelSelect', `Levels → ${Game.state}`);
+      assert(menu.hidden && pb.hidden, 'pause UI hidden outside play');
+      Layout.force = 'keys'; Layout.apply(); flat(); step(1 / 120);
+      assert(getComputedStyle(pb).display === 'none', 'no floating pause button on desktop');
+      Layout.force = 'deck'; Layout.apply(); flat(); step(0.5);
+      press(document.getElementById('btn-pause'));
+      assert(Game.state === 'paused', 'deck pause button');
+      return 'Esc/button/deck pause; resume, restart, sound, levels';
+    },
     // ── checks added by later tasks go here, in task order ──
   };
 
@@ -200,6 +231,7 @@
       document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
     }
     const results = [];
+    const mutedBefore = Audio.muted;                 // restored once, after the whole run
     for (const name of list) {
       const fn = CHECKS[name];
       if (!fn) { results.push({ name, ok: false, detail: 'no such check' }); continue; }
@@ -217,6 +249,7 @@
         Engine.halted = false;
       }
     }
+    setTimeout(() => { Audio.muted = mutedBefore; }, 600);   // let queued SFX fire muted
     return { pass: results.every(r => r.ok !== false), results };
   };
   Object.assign(window, { __checks: { step, drawTexts, play, flat, tap, swipe, pointer, press, wait, assert } });

@@ -376,7 +376,7 @@ const Game = {
     else if (this.state === 'playing') this.drawHUD(ctx);
     else if (this.state === 'levelComplete') this.drawLevelComplete(ctx);
     else if (this.state === 'tentFinale') this.drawTentFinale(ctx);
-    else if (this.state === 'paused') { this.drawHUD(ctx); this.drawPause(ctx); }
+    else if (this.state === 'paused') this.drawHUD(ctx);   // the menu itself is DOM (#pause-menu)
     else if (this.state === 'win') this.drawWin(ctx);
 
     // Mute indicator
@@ -651,23 +651,6 @@ const Game = {
       ctx.font = Tokens.font.prompt;
       ctx.fillText('TAP  /  SPACE', Engine.width / 2, Engine.height / 2 + 85);
     }
-  },
-
-  drawPause(ctx) {
-    ctx.fillStyle = Tokens.rgba(Tokens.color.overlay, 0.6);
-    ctx.fillRect(0, 0, Engine.width, Engine.height);
-
-    ctx.textAlign = 'center';
-    ctx.fillStyle = Tokens.color.ink;
-    ctx.font = Tokens.font.heading;
-    ctx.fillText('PAUSED', Engine.width / 2, Engine.height / 2 - 50);
-
-    ctx.fillStyle = Tokens.rgba(Tokens.color.dust, 0.7);
-    ctx.font = Tokens.font.body;
-    ctx.fillText('ESC / P  —  resume', Engine.width / 2, Engine.height / 2);
-    ctx.fillText('R  —  restart level', Engine.width / 2, Engine.height / 2 + 25);
-    ctx.fillText('Q  —  quit to level select', Engine.width / 2, Engine.height / 2 + 50);
-    ctx.fillText('M  —  toggle mute', Engine.width / 2, Engine.height / 2 + 75);
   },
 
   drawWin(ctx) {
