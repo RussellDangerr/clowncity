@@ -403,6 +403,10 @@
         inputTypes.forEach(function (t) { window.removeEventListener(t, onInput, true); });
         // hand off to the game now (listeners are gone, so this reaches it)
         window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', key: ' ', bubbles: true }));
+        // …and let it go again: a click, tap or Enter never sends a Space keyup,
+        // so without this Input thinks Space is still held and swallows the
+        // first real Space press on level select.
+        window.dispatchEvent(new KeyboardEvent('keyup', { code: 'Space', key: ' ', bubbles: true }));
         splash.classList.add('go');
         setTimeout(function () { splash.style.display = 'none'; }, 1080);
       }

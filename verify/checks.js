@@ -275,6 +275,20 @@
       assert(res.deck.cruise.t >= 1.0, `deck cruise warning ${res.deck.cruise.t}s < 1.0s (${JSON.stringify(res.deck.cruise)})`);
       return JSON.stringify(res);
     },
+    async splashHandoff() {
+      const splash = document.getElementById('splash');
+      if (splash.classList.contains('go')) return null;   // already entered this page load
+      document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true }));
+      assert(splash.classList.contains('go'), 'splash did not enter on click');
+      assert(!Input.held('Space'), 'Space is stuck down after the splash handoff');
+      step(1);
+      assert(Game.state === 'levelSelect', `after the splash: ${Game.state}`);
+      window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space' }));
+      step(1 / 120);
+      window.dispatchEvent(new KeyboardEvent('keyup', { code: 'Space' }));
+      assert(Game.transitionDir === 1, 'the first Space on level select should start the level');
+      return 'click → level select; first Space works';
+    },
     // ── checks added by later tasks go here, in task order ──
   };
 
