@@ -199,8 +199,11 @@ const Player = {
     this.wasGrounded = false;
     this.coyoteTimer = 0;
     // Restart the unicycle: slowly ramp forward (right) from a standstill.
+    // Reset the sticky steer too, or dying mid-leftward-turn respawns you
+    // immediately braking back to the left.
     this.travelDir = 1;
     this.desiredDir = 1;
+    Input.runDir = 1;
     this.runState = 'ramp';
     this.rampT = 0;
     this.brakeTimer = 0;
@@ -592,6 +595,10 @@ const Player = {
     this.vx = away * this.wallJumpPushX;
     this.travelDir = away;
     this.desiredDir = away;
+    // The kick IS a steer: sync the sticky intent, or once wallJumpLockTime
+    // expires the brake check sees runDir still pointing at the old wall and
+    // U-turns Bozo mid-air (a tap wall-jump could never climb a shaft).
+    Input.runDir = away;
     this.runState = 'cruise';
     this.rampT = 1;
     this.attackDir = 0;
