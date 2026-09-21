@@ -27,6 +27,7 @@
 
     html, body {
       height: 100vh;
+      height: 100dvh;   /* the VISIBLE height: excludes mobile browser toolbars */
       overflow: hidden;
       display: flex;
       justify-content: center;
@@ -87,6 +88,18 @@
         0 0 0 8px rgba(232,198,106,0.35),
         0 0 90px -12px rgba(232,198,106,0.45),
         0 36px 90px -24px #000;
+    }
+
+    [hidden] { display: none !important; }
+
+    /* ── Deck mode (touch, held upright): game across the top, deck below ── */
+    html.deck body {
+      flex-direction: column; justify-content: flex-start;
+      padding-top: env(safe-area-inset-top);
+    }
+    html.deck canvas {
+      border-radius: 0;
+      box-shadow: 0 2px 0 var(--gold), 0 8px 0 var(--oxblood), 0 9px 0 rgba(232,198,106,0.35);
     }
 
     /* ── Splash / front door ── */
@@ -224,6 +237,7 @@
   <script src="js/entities.js"></script>
   <script src="js/particles.js"></script>
   <script src="js/audio.js"></script>
+  <script src="js/layout.js"></script>
   <script src="js/game.js"></script>
 
   <script>

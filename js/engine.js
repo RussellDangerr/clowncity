@@ -19,19 +19,16 @@ const Engine = {
   init() {
     this.canvas = document.getElementById('game');
     this.ctx = this.canvas.getContext('2d');
-    this.resize();
-    window.addEventListener('resize', () => this.resize());
+    this.setView(this.width, this.height);   // Layout.init() then sizes it for the screen
   },
 
-  resize() {
-    const scale = Math.min(
-      window.innerWidth / this.width,
-      window.innerHeight / this.height
-    );
-    this.canvas.width = this.width;
-    this.canvas.height = this.height;
-    this.canvas.style.width = (this.width * scale) + 'px';
-    this.canvas.style.height = (this.height * scale) + 'px';
+  // Internal resolution = the canvas bitmap (all drawing reads width/height).
+  // CSS sizing and the choice of view live in Layout.
+  setView(w, h) {
+    this.width = w;
+    this.height = h;
+    this.canvas.width = w;
+    this.canvas.height = h;
   },
 
   start() {

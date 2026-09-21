@@ -27,6 +27,7 @@ const Game = {
     Engine.init();
     Input.init();
     Audio.init();
+    Layout.init();
     this.totalLevels = Level.maps.length;
     this.loadSave();
 

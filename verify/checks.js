@@ -100,6 +100,23 @@
       assert(Player.x > Level.spawnX, 'Bozo should roll forward from spawn');
       return `${Engine.systems.length} systems, Bozo rolled to x=${Math.round(Player.x)}`;
     },
+    async layoutModes() {
+      const root = document.documentElement;
+      Layout.force = 'deck'; Layout.apply();
+      assert(Engine.width === 640 && Engine.height === 480, `deck view is ${Engine.width}x${Engine.height}`);
+      assert(Engine.canvas.width === 640 && Engine.canvas.height === 480, 'canvas bitmap not resized');
+      assert(root.classList.contains('deck') && root.classList.contains('touch'), 'deck mode needs html.deck.touch');
+      assert(Camera.lookaheadX === Layout.views.deck.lookahead, 'deck camera lead not applied');
+      play(0); step(1);                                         // a frame in the deck view must not throw
+      Layout.force = 'touch'; Layout.apply();
+      assert(Engine.width === 960 && Engine.height === 540, `touch view is ${Engine.width}x${Engine.height}`);
+      assert(!root.classList.contains('deck') && root.classList.contains('touch'), 'touch scheme classes');
+      Layout.force = 'keys'; Layout.apply();
+      assert(!root.classList.contains('touch'), 'keys scheme must drop html.touch');
+      assert(Camera.lookaheadX === 60, 'normal camera lead should stay 60');
+      step(1);
+      return 'deck 640x480 + lead, touch/keys 960x540, classes ok';
+    },
     // ── checks added by later tasks go here, in task order ──
   };
 
