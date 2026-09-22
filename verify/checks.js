@@ -19,10 +19,15 @@
     for (let i = 0; i < n; i++) for (const s of Engine.systems) if (s.update) s.update(Engine.fixedDt);
   }
 
-  // Run one draw pass and report every fillText as { text, font }.
+  // Run one draw pass and report every fillText as { text, font, px } — px is
+  // the rendered size in canvas pixels (font size × the current transform scale).
   function drawTexts() {
     const ctx = Engine.ctx, orig = ctx.fillText, seen = [];
-    ctx.fillText = function (t, ...a) { seen.push({ text: String(t), font: ctx.font }); return orig.call(this, t, ...a); };
+    ctx.fillText = function (t, ...a) {
+      const m = ctx.font.match(/(\d+(?:\.\d+)?)px/);
+      seen.push({ text: String(t), font: ctx.font, px: m ? parseFloat(m[1]) * ctx.getTransform().a : 0 });
+      return orig.call(this, t, ...a);
+    };
     try {
       ctx.clearRect(0, 0, Engine.width, Engine.height);
       for (const s of Engine.systems) if (s.draw) s.draw(ctx);
@@ -341,6 +346,34 @@
       const res = await fetch('/og.png', { cache: 'no-store' });
       assert(res.ok && res.headers.get('content-type').includes('png'), 'og.png not served');
       return `og:image → ${img}`;
+    },
+    // Finale / level-complete / win text: prompt per scheme, a backing panel so
+    // it reads over the tent, and phone-sized text in deck mode.
+    async completeScreen() {
+      assert(Game._panel, 'Game._panel missing');
+      for (const s of ['keys', 'touch', 'deck']) {
+        Layout.force = s; Layout.apply();
+        play(2); Player.finish(true);
+        const want = Layout.hints[s].continue;
+        assert(want, `${s}: no continue hint`);
+        for (const state of ['tentFinale', 'levelComplete', 'win']) {
+          Game.state = state; Game.timer = 2.1; Game.tentTimer = 1;   // 2.1: prompt blink is "on"
+          const orig = Game._panel;
+          let panels = 0, texts;
+          Game._panel = function (...a) { panels++; return orig.apply(this, a); };
+          try { texts = drawTexts(); } finally { Game._panel = orig; }
+          if (state !== 'win') assert(panels >= 1, `${s}/${state}: no backing panel behind the text`);
+          if (state !== 'tentFinale') {
+            assert(texts.some(t => t.text === want), `${s}/${state}: continue prompt should read "${want}"`);
+            assert(!texts.some(t => /TAP\s+\/\s+SPACE/.test(t.text)), `${s}/${state}: old "TAP / SPACE" prompt still drawn`);
+          }
+          if (s === 'deck' && state !== 'tentFinale') {
+            const stat = texts.find(t => /^(time|total deaths):/.test(t.text));
+            assert(stat && stat.px >= 18, `deck/${state}: stats render at ${stat && stat.px.toFixed(1)}px (want >= 18)`);
+          }
+        }
+      }
+      return 'panels behind finale + complete text; prompt per scheme; phone-sized stats';
     },
     // ── checks added by later tasks go here, in task order ──
   };

@@ -324,11 +324,41 @@ const Game = {
   drawTentFinale(ctx) {
     this.drawHUD(ctx);
     const a = Math.min(1, this.tentTimer * 2);
-    ctx.textAlign = 'center';
-    ctx.fillStyle = Tokens.rgba(Tokens.color.charged, a * 0.9);
+    const cx = Engine.width / 2, cy = Engine.height / 2;
+    ctx.save();
+    this._uiScale(ctx, cx, cy);
     ctx.font = Tokens.font.heading;
-    ctx.fillText('INTO THE BIG TOP!', Engine.width / 2, Engine.height / 2 - 10);
+    const w = ctx.measureText('INTO THE BIG TOP!').width + 56;
+    ctx.globalAlpha = a;
+    this._panel(ctx, cx - w / 2, cy - 44, w, 54);
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = Tokens.rgba(Tokens.color.charged, a * 0.95);
+    ctx.fillText('INTO THE BIG TOP!', cx, cy - 10);
+    ctx.restore();
     ctx.textAlign = 'left';
+  },
+
+  // Backing panel for overlay text so it reads over any scenery (the tent!),
+  // styled like the pause menu: oxblood-black with a thin gold edge.
+  _panel(ctx, x, y, w, h) {
+    ctx.fillStyle = Tokens.rgba(Tokens.color.panel, 0.84);
+    ctx.strokeStyle = Tokens.rgba(Tokens.color.gold, 0.55);
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, w, h, 8); else ctx.rect(x, y, w, h);
+    ctx.fill();
+    ctx.stroke();
+    ctx.lineWidth = 1;
+  },
+
+  // Enlarge the overlay drawn after this (until ctx.restore) around (cx, cy)
+  // on small screens — see Layout.views[*].uiScale.
+  _uiScale(ctx, cx, cy) {
+    const k = Layout.views[Layout.mode].uiScale;
+    ctx.translate(cx, cy);
+    ctx.scale(k, k);
+    ctx.translate(-cx, -cy);
   },
 
   // ── PAUSED ──
@@ -620,32 +650,37 @@ const Game = {
   },
 
   drawLevelComplete(ctx) {
-    ctx.textAlign = 'center';
     const alpha = Math.min(1, this.timer * 2);
+    const cx = Engine.width / 2, cy = Engine.height / 2;
+    ctx.save();
+    this._uiScale(ctx, cx, cy);
+    ctx.globalAlpha = alpha;
+    this._panel(ctx, cx - 170, cy - 62, 340, 166);
+    ctx.globalAlpha = 1;
+    ctx.textAlign = 'center';
 
-    ctx.fillStyle = Tokens.rgba(Tokens.color.gold, alpha * 0.9);
+    ctx.fillStyle = Tokens.rgba(Tokens.color.gold, alpha * 0.95);
     ctx.font = Tokens.font.heading;
-    ctx.fillText('LEVEL COMPLETE', Engine.width / 2, Engine.height / 2 - 20);
+    ctx.fillText('LEVEL COMPLETE', cx, cy - 20);
 
-    ctx.fillStyle = Tokens.rgba(Tokens.color.inkWarm, alpha * 0.5);
+    ctx.fillStyle = Tokens.rgba(Tokens.color.inkWarm, alpha * 0.85);
     ctx.font = Tokens.font.body;
     const lmins = Math.floor(this.levelTimer / 60);
     const lsecs = Math.floor(this.levelTimer % 60);
     const lms = Math.floor((this.levelTimer % 1) * 100);
-    ctx.fillText(`time: ${lmins}:${lsecs < 10 ? '0' : ''}${lsecs}.${lms < 10 ? '0' : ''}${lms}`, Engine.width / 2, Engine.height / 2 + 12);
-    if (Player.deathCount > 0) {
-      ctx.fillText(`deaths: ${Player.deathCount}`, Engine.width / 2, Engine.height / 2 + 32);
-    }
-    if (Level.totalCollectibles > 0) {
-      ctx.fillText(`gems: ${Level.collectedCount} / ${Level.totalCollectibles}`, Engine.width / 2, Engine.height / 2 + 52);
-    }
+    const stats = [`time: ${lmins}:${lsecs < 10 ? '0' : ''}${lsecs}.${lms < 10 ? '0' : ''}${lms}`];
+    if (Player.deathCount > 0) stats.push(`deaths: ${Player.deathCount}`);
+    if (Level.totalCollectibles > 0) stats.push(`gems: ${Level.collectedCount} / ${Level.totalCollectibles}`);
+    stats.forEach((line, i) => ctx.fillText(line, cx, cy + 12 + i * 20));   // no gap for a skipped line
 
     // Continue prompt (after brief delay)
     if (this.timer > 1.0 && Math.sin(this.timer * 3) > -0.3) {
-      ctx.fillStyle = Tokens.rgba(Tokens.color.gold, alpha * 0.6);
+      ctx.fillStyle = Tokens.rgba(Tokens.color.gold, alpha * 0.85);
       ctx.font = Tokens.font.prompt;
-      ctx.fillText('TAP  /  SPACE', Engine.width / 2, Engine.height / 2 + 85);
+      ctx.fillText(Layout.hint('continue'), cx, cy + 85);
     }
+    ctx.restore();
+    ctx.textAlign = 'left';
   },
 
   // Set `font`, shrinking its px size if `text` would be wider than maxW.
@@ -685,16 +720,22 @@ const Game = {
     ctx.font = Tokens.font.serif;
     ctx.fillText('You escaped Clown City', cx, cy - 22);
 
-    ctx.fillStyle = Tokens.rgba(Tokens.color.dust, 0.7);
+    // Stats + prompt, enlarged on phones (anchored under the subtitle so the
+    // bigger block grows downward, away from the title).
+    ctx.save();
+    this._uiScale(ctx, cx, cy + 15);
+    ctx.fillStyle = Tokens.rgba(Tokens.color.dust, 0.8);
     ctx.font = Tokens.font.body;
-    ctx.fillText(`total deaths: ${this.totalDeaths}`, Engine.width / 2, Engine.height / 2 + 15);
-    ctx.fillText(`total gems: ${this.totalGems}`, Engine.width / 2, Engine.height / 2 + 38);
+    ctx.fillText(`total deaths: ${this.totalDeaths}`, cx, cy + 15);
+    ctx.fillText(`total gems: ${this.totalGems}`, cx, cy + 38);
 
     if (Math.sin(t * 3) > -0.3) {
-      ctx.fillStyle = Tokens.rgba(Tokens.color.gold, 0.6);
+      ctx.fillStyle = Tokens.rgba(Tokens.color.gold, 0.75);
       ctx.font = Tokens.font.md;
-      ctx.fillText('TAP  /  SPACE', Engine.width / 2, Engine.height / 2 + 80);
+      ctx.fillText(Layout.hint('continue'), cx, cy + 80);
     }
+    ctx.restore();
+    ctx.textAlign = 'left';
   }
 };
 

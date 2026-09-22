@@ -13,6 +13,7 @@ const Tokens = {
     bgSelect: '#120a18',   // level-select gradient tail
     bgWin:    '#14100a',   // win-screen gradient tail
     overlay:  [0, 0, 0],   // pause dim + scene transition
+    panel:    [12, 6, 8],  // backing panel behind overlay text (the pause menu's oxblood-black)
 
     // ── Text / ink ──
     ink:      '#e8e0d0',        // primary headings (warm bone)

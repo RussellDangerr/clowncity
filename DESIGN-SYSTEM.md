@@ -27,6 +27,7 @@ Stored as hex strings (opaque fills) or `[r,g,b]` triples (use `Tokens.rgba(c, a
 | `bgDeep` | `#0a0a12` | app background + every screen-gradient base |
 | `bgCircus` / `bgSelect` / `bgWin` | `#1a0a20` / `#120a18` / `#14100a` | screen-gradient tails |
 | `overlay` | `[0,0,0]` | pause dim, scene transition |
+| `panel` | `[12,6,8]` | backing panel behind finale / level-complete text (matches the pause menu) |
 | `ink` | `#e8e0d0` | primary headings (warm bone) |
 | `dust` | `[200,190,170]` | body copy, HUD, run-dust particles |
 | `inkWarm` | `[200,180,150]` | subtitles, level-complete stats |

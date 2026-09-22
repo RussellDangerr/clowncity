@@ -9,9 +9,11 @@
 const Layout = {
   force: null,        // 'deck' | 'touch' | 'keys' — overrides detection (checks / debugging)
   scheme: 'keys',
+  // uiScale enlarges overlay screens (level complete, finale, win): the deck
+  // view is drawn ~0.59× on a phone, so unscaled 14px stats land at ~8px.
   views: {
-    normal: { w: 960, h: 540, lookahead: 60 },
-    deck:   { w: 640, h: 480, lookahead: 220 },   // lead further so Bozo sits left of centre
+    normal: { w: 960, h: 540, lookahead: 60,  uiScale: 1 },
+    deck:   { w: 640, h: 480, lookahead: 220, uiScale: 1.35 },   // lead further so Bozo sits left of centre
   },
   deckMinH: 200,      // px — the deck is never shorter than this
 
@@ -22,18 +24,21 @@ const Layout = {
       select: '← →  choose       SPACE  play',
       pause:  '← → turn · space jump · press your heading to spray · esc resume',
       muted:  '[MUTED - M to toggle]',
+      continue: 'SPACE',
     },
     touch: {
       splash: 'swipe to turn · tap to jump · swipe your heading to spray',
       select: 'SWIPE  choose       TAP  play',
       pause:  'swipe to turn · tap to jump · swipe your heading to spray',
       muted:  '[MUTED]',
+      continue: 'TAP',
     },
     deck: {
       splash: '◀ ▶ to turn · jump · press your heading to spray',
       select: '◀ ▶  choose       JUMP  play',
       pause:  '◀ ▶ turn · JUMP jump · press your heading to spray',
       muted:  '[MUTED]',
+      continue: 'JUMP',
     },
   },
 
