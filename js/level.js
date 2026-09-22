@@ -10,7 +10,7 @@ const Level = {
   // Tile legend:
   // 1 = solid, 0 = air, g = goal
   // c = checkpoint, o = collectible (gem)
-  // T = treadmill (caps Bozo's speed at 0.5 and bleeds momentum)
+  // T = treadmill (caps Poko's speed at 0.5 and bleeds momentum)
   // / = slope rising to the right, \ = slope rising to the left (45°)
   //     (authoring: a literal backslash must be written \\ inside the JS strings)
 
@@ -146,10 +146,10 @@ const Level = {
       spawn: [3, 13],
       tent: true,                    // goal IS the tent mouth (render + finale derive from the goal tile)
       entities: [],
-      // 80 wide x 25 tall — generated (every row exactly 80 chars). Plateau intro
-      // (rows 14-24, cols 1-19) -> 8-tile downhill bomb '\' (20,14)->(27,21) ->
-      // 2-tile flat -> 2-tile up-kicker '/' (30,21)/(31,20) -> chasm cols 32-36 ->
-      // tent ledge (rows 14-24, cols 37-78) with goal at (59,13).
+      // 80 wide x 25 tall. Plateau intro (rows 14-24, cols 1-21) -> 8-tile downhill
+      // bomb '\' (22,14)->(29,21) flowing straight into a 2-tile up-kicker '/'
+      // (30,21)/(31,20) (the v0.4.1 fix removed the flat between them) -> chasm
+      // cols 32-36 -> tent ledge (rows 14-24, cols 37-78) with goal at (59,13).
       data: [
         '10000000000000000000000000000000000000000000000000000000000000000000000000000001',
         '10000000000000000000000000000000000000000000000000000000000000000000000000000001',

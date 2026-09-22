@@ -189,7 +189,7 @@ Expected after implementation: `{found:1, slopeDir:1, yAtLeft:96, yAtRight:64, i
   // Tile legend:
   // 1 = solid, 0 = air, g = goal
   // c = checkpoint, o = collectible (gem)
-  // T = treadmill (caps Bozo's speed at 0.5 and bleeds momentum)
+  // T = treadmill (caps Poko's speed at 0.5 and bleeds momentum)
   // / = slope rising to the right, \ = slope rising to the left (45°)
   //     (authoring: a literal backslash must be written \\ inside the JS strings)
 ```
@@ -779,7 +779,7 @@ git commit -m "feat(level): procedural circus tent set-piece at the Big Drop goa
 ## Task 10: Cinematic tent finale
 
 **Files:**
-- Modify: `js/game.js` — branch the goal hook (228-256) to a `tentFinale` state when the map has a `tent`; add `updateTentFinale` + `drawTentFinale`; register the state in `update()` dispatch (128-135) and `drawOverlay()` (325-332). (The player update/draw gates need no change — they already exclude `tentFinale`, so Bozo freezes + hides automatically.)
+- Modify: `js/game.js` — branch the goal hook (228-256) to a `tentFinale` state when the map has a `tent`; add `updateTentFinale` + `drawTentFinale`; register the state in `update()` dispatch (128-135) and `drawOverlay()` (325-332). (The player update/draw gates need no change — they already exclude `tentFinale`, so Poko freezes + hides automatically.)
 
 - [ ] **Step 1: Branch the goal hook** — inside the goal loop in `updatePlaying`, replace the block that runs after `Audio.levelComplete();` through `return;` (lines 236-255) with a version that diverts to the finale when there's a tent. Keep all the save logic; only the tail changes:
 
@@ -833,7 +833,7 @@ In `drawOverlay()` (after the `levelComplete` line 329) add:
 ```js
     else if (this.state === 'tentFinale') this.drawTentFinale(ctx);
 ```
-**No change to the registered player system is needed.** Its update gate (lines 38-43) only runs `Player.update` in `playing`/`levelComplete`, and its draw gate (lines 44-51) only draws the player in `playing`/`levelComplete`/`paused`. Neither lists `tentFinale`, so during the finale Bozo is automatically **frozen and hidden** ("swallowed") with zero edits — while `Particles` and `Camera` (registered separately and unconditionally) keep animating the confetti.
+**No change to the registered player system is needed.** Its update gate (lines 38-43) only runs `Player.update` in `playing`/`levelComplete`, and its draw gate (lines 44-51) only draws the player in `playing`/`levelComplete`/`paused`. Neither lists `tentFinale`, so during the finale Poko is automatically **frozen and hidden** ("swallowed") with zero edits — while `Particles` and `Camera` (registered separately and unconditionally) keep animating the confetti.
 
 - [ ] **Step 4: Add `updateTentFinale` + `drawTentFinale`** (after `updateLevelComplete`, line 290)
 
@@ -866,7 +866,7 @@ In `drawOverlay()` (after the `levelComplete` line 329) add:
 
 - [ ] **Step 5: Verify the finale + no soft-lock**
 
-Reload, play the Big Drop to the tent (or, to reach it fast, `preview_eval`: position the player at the goal — `Player.x = 70*32; Player.y = 6*32;` while `Game.state='playing'`). Confirm: confetti bursts, Bozo vanishes, "INTO THE BIG TOP!" shows, and after ~1.3s the normal LEVEL COMPLETE screen appears and `TAP/SPACE` advances. Re-check that entering the mouth at LOW speed or by falling also triggers it (no speed/input dependency).
+Reload, play the Big Drop to the tent (or, to reach it fast, `preview_eval`: position the player at the goal — `Player.x = 70*32; Player.y = 6*32;` while `Game.state='playing'`). Confirm: confetti bursts, Poko vanishes, "INTO THE BIG TOP!" shows, and after ~1.3s the normal LEVEL COMPLETE screen appears and `TAP/SPACE` advances. Re-check that entering the mouth at LOW speed or by falling also triggers it (no speed/input dependency).
 
 - [ ] **Step 6: Commit**
 

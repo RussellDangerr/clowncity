@@ -22,7 +22,7 @@ const Camera = {
     const px = Player.x + Player.w / 2;
     const py = Player.y + Player.h / 2;
 
-    // Lead the direction Bozo is actually travelling (facing is frozen in the
+    // Lead the direction Poko is actually travelling (facing is frozen in the
     // unicycle rework), falling back to committed travelDir during the brake pause.
     const travelDir = Math.sign(Player.vx) || Player.travelDir || 1;
     const lookX = travelDir * this.lookaheadX;

@@ -27,6 +27,7 @@ Stored as hex strings (opaque fills) or `[r,g,b]` triples (use `Tokens.rgba(c, a
 | `bgDeep` | `#0a0a12` | app background + every screen-gradient base |
 | `bgCircus` / `bgSelect` / `bgWin` | `#1a0a20` / `#120a18` / `#14100a` | screen-gradient tails |
 | `overlay` | `[0,0,0]` | pause dim, scene transition |
+| `panel` | `[12,6,8]` | backing panel behind finale / level-complete text (matches the pause menu) |
 | `ink` | `#e8e0d0` | primary headings (warm bone) |
 | `dust` | `[200,190,170]` | body copy, HUD, run-dust particles |
 | `inkWarm` | `[200,180,150]` | subtitles, level-complete stats |
@@ -41,7 +42,7 @@ Stored as hex strings (opaque fills) or `[r,g,b]` triples (use `Tokens.rgba(c, a
 | `kill` | `[255,120,80]` | enemy-defeat burst |
 | `enemy` / `enemyLight` / `enemyDark` | `#cc4444` / `#dd6666` / `#aa3333` | patrol enemy body/middle/legs |
 | `eyeWhite` / `eyePupil` | `#fff` / `#111` | enemy googly eyes |
-| `playerBody` / `playerEye` | `#e8e8f0` / `#1a1a2e` | Bozo rect-fallback |
+| `playerBody` / `playerEye` | `#e8e8f0` / `#1a1a2e` | Poko rect-fallback |
 | `trailGhost` / `trailDot` | `[180,200,255]` / `[200,220,255]` | motion trail + speed lines |
 | `white` | `[255,255,255]` | landing/jump dust, platform sparkles, flash |
 | `belt` | `[150,210,255]` | treadmill chevrons + belt dust |
@@ -54,14 +55,18 @@ harlequin / puppet. They are already centralized as data and intentionally
 
 ### Typography
 
-One family (`monospace`), one fixed scale. Every `ctx.font` reads from here.
+A `monospace` scale for the game UI, plus the two marquee faces (loaded by
+`index.html`) for the moments that should match the splash. Every `ctx.font`
+reads from here.
 
 | Token | Value | Used for |
 |-------|-------|----------|
+| `display` | `58px Ewert` | "CONGRATULATIONS" (shrunk to fit narrow views) |
+| `serif` | `bold 20px Cinzel` | win subtitle |
 | `title` | `bold 52px` | "CLOWN CITY" |
-| `win` | `bold 42px` | "CONGRATULATIONS" |
-| `heading` | `bold 28px` | screen titles (SELECT / COMPLETE / PAUSED) |
+| `heading` | `bold 28px` | screen titles (SELECT / COMPLETE) |
 | `cardNum` | `bold 20px` | level-card number |
+| `lock` | `20px` | level-card LOCKED label |
 | `hud` | `bold 18px` | in-game level name |
 | `lg` | `18px` | start prompt, win body |
 | `md` | `16px` | subtitle, win prompt |
@@ -75,6 +80,7 @@ One family (`monospace`), one fixed scale. Every `ctx.font` reads from here.
 | Group | Token | Value | Used for |
 |-------|-------|-------|----------|
 | `space` | `hudMargin` / `hudTop` | 16 / 24 | HUD insets |
+| `space` | `hudTouchLeft` | 112 | left HUD inset on touch screens (the floating pause button owns the corner) |
 | `space` | `cardW` / `cardH` / `cardGap` | 180 / 140 / 30 | level-select cards |
 | `motion` | `flashDecay` / `shakeDecay` | 6 / 8 | screen-flash & camera-shake fade |
 | `motion` | `parallaxX` / `parallaxY` | 3200 / 1000 | background dot tiling |
@@ -93,7 +99,7 @@ One family (`monospace`), one fixed scale. Every `ctx.font` reads from here.
 | Goal / checkpoint / gem | `level.js draw` | theme `goalColor`, `goldFlag` |
 | Treadmill | `level.js` + `player.js` | `treadmill[]`, `belt` |
 | Enemy (patrol) | `entities.js` | `enemy*`, `eyeWhite/eyePupil`; defeat → `kill`, `white` |
-| Player (Bozo) | `player.js` | `playerBody/playerEye`, `trail*`, `dust`, `danger` |
+| Player (Poko) | `player.js` | `playerBody/playerEye`, `trail*`, `dust`, `danger` |
 
 ---
 

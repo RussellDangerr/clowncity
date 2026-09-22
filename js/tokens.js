@@ -13,6 +13,7 @@ const Tokens = {
     bgSelect: '#120a18',   // level-select gradient tail
     bgWin:    '#14100a',   // win-screen gradient tail
     overlay:  [0, 0, 0],   // pause dim + scene transition
+    panel:    [12, 6, 8],  // backing panel behind overlay text (the pause menu's oxblood-black)
 
     // ── Text / ink ──
     ink:      '#e8e0d0',        // primary headings (warm bone)
@@ -24,6 +25,8 @@ const Tokens = {
     // ── Brand / accent ──
     gold:       [255, 215, 100], // primary accent: prompts, goal, win text
     goldBright: '#ffd764',       // win title fill
+    goldShade:  '#b07a1e',       // marquee gold extrusion (upper step)
+    goldDeep:   '#6e4a12',       // marquee gold extrusion (lower step)
     goldFlag:   [255, 215, 50],  // checkpoint flag + checkpoint burst
     charged:    [255, 240, 150], // overspeed "charged" tell (speedometer + launch spray)
 
@@ -61,11 +64,10 @@ const Tokens = {
     tentMouth: '#140a16',  // dark tent entrance
   },
 
-  // ── Typography ── one family, a fixed scale (the game is all monospace) ──
+  // ── Typography ── monospace scale for the game UI, plus the marquee faces ──
   font: {
     family:  'monospace',
     title:   'bold 52px monospace',
-    win:     'bold 42px monospace',
     heading: 'bold 28px monospace',
     cardNum: 'bold 20px monospace',
     hud:     'bold 18px monospace',
@@ -75,11 +77,15 @@ const Tokens = {
     body:    '14px monospace',
     sm:      '13px monospace',
     xs:      '12px monospace',
+    lock:    '20px monospace',          // level-select LOCKED label
+    display: '58px Ewert, monospace',   // marquee display face (win title); loaded by index.html
+    serif:   'bold 20px Cinzel, serif', // marquee serif (win subtitle)
   },
 
   // ── Spacing / layout (px on the fixed 960×540 canvas) ──
   space: {
     hudMargin: 16,   // HUD inset from screen edges
+    hudTouchLeft: 112, // left HUD inset on touch screens: the floating pause button owns the corner
     hudTop:    24,   // HUD text baseline from top
     cardW:    180,   // level-select card
     cardH:    140,

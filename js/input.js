@@ -17,44 +17,68 @@ const Input = {
   _touches: {},
   swipeThreshold: 30,  // px of horizontal travel to register a swipe
   tapMaxMove: 14,      // px total movement under which a touch counts as a tap
-  tapMaxTime: 0.25,    // s max duration for a tap
 
   init() {
     window.addEventListener('keydown', e => {
-      if (!this.keys[e.code]) {
-        this.justPressed[e.code] = true;
-        this.buffer[e.code] = this.bufferTime;
-      }
-      this.keys[e.code] = true;
-      // Keyboard parity for unicycle steering
-      if (e.code === 'ArrowLeft' || e.code === 'KeyA') this.runDir = -1;
-      if (e.code === 'ArrowRight' || e.code === 'KeyD') this.runDir = 1;
+      this._down(e.code);
       // Prevent scrolling
       if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) {
         e.preventDefault();
       }
     });
 
-    window.addEventListener('keyup', e => {
-      this.keys[e.code] = false;
-    });
+    window.addEventListener('keyup', e => this._up(e.code));
 
     this.initTouch();
   },
 
+  // ── Virtual keys ── the keyboard, the on-screen deck and the pause menu all
+  // press through here, so every input source behaves identically.
+  _down(code) {
+    if (!this.keys[code]) {
+      this.justPressed[code] = true;
+      this.buffer[code] = this.bufferTime;
+    }
+    this.keys[code] = true;
+    // Unicycle steering
+    if (code === 'ArrowLeft' || code === 'KeyA') this.runDir = -1;
+    if (code === 'ArrowRight' || code === 'KeyD') this.runDir = 1;
+  },
+
+  _up(code) {
+    this.keys[code] = false;
+  },
+
+  // One press-and-release (menu buttons). The press edge survives until the
+  // next Input.update, so the game still sees it this frame.
+  tapKey(code) {
+    this._down(code);
+    this._up(code);
+  },
+
+  // Touches that START on on-screen UI (deck, pause button, pause menu) belong
+  // to that UI: no gesture, and no preventDefault (that would swallow its click).
+  _isUI(t) {
+    return !!(t.target && t.target.closest && t.target.closest('[data-ui]'));
+  },
+
   initTouch() {
-    const now = () => performance.now() / 1000;
+    const gameTouches = e => Array.from(e.changedTouches).filter(t => !this._isUI(t));
 
     window.addEventListener('touchstart', e => {
+      const touches = gameTouches(e);
+      if (!touches.length) return;
       e.preventDefault();
-      for (const t of e.changedTouches) {
-        this._touches[t.identifier] = { x0: t.clientX, y0: t.clientY, t0: now(), swiped: false };
+      for (const t of touches) {
+        this._touches[t.identifier] = { x0: t.clientX, y0: t.clientY, swiped: false };
       }
     }, { passive: false });
 
     window.addEventListener('touchmove', e => {
+      const touches = gameTouches(e);
+      if (!touches.length) return;
       e.preventDefault();
-      for (const t of e.changedTouches) {
+      for (const t of touches) {
         const rec = this._touches[t.identifier];
         if (!rec) continue;
         const dx = t.clientX - rec.x0;
@@ -70,20 +94,21 @@ const Input = {
     }, { passive: false });
 
     window.addEventListener('touchend', e => {
+      const touches = gameTouches(e);
+      if (!touches.length) return;
       e.preventDefault();
-      for (const t of e.changedTouches) {
+      for (const t of touches) {
         const rec = this._touches[t.identifier];
-        if (rec) {
-          const dur = now() - rec.t0;
-          const dist = Math.hypot(t.clientX - rec.x0, t.clientY - rec.y0);
-          if (!rec.swiped && dist < this.tapMaxMove && dur < this.tapMaxTime) {
-            // Tap = jump (also a menu confirm)
-            this.buffer['Jump'] = this.bufferTime;
-            this._jumpDown = true;
-            this._tapped = true;
-          }
-          delete this._touches[t.identifier];
+        if (!rec) continue;
+        const dist = Math.hypot(t.clientX - rec.x0, t.clientY - rec.y0);
+        // Any touch that didn't travel is a tap = jump (and a menu confirm),
+        // however long it was held — a slow, deliberate press is still a jump.
+        if (!rec.swiped && dist < this.tapMaxMove) {
+          this.buffer['Jump'] = this.bufferTime;
+          this._jumpDown = true;
+          this._tapped = true;
         }
+        delete this._touches[t.identifier];
       }
     }, { passive: false });
 

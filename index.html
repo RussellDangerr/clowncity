@@ -4,6 +4,16 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Clown City</title>
+  <meta name="description" content="A clown on a unicycle: a bite-size browser platformer with three levels. Plays on phones and desktop.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='27' fill='%23e23b30'/%3E%3Ccircle cx='23' cy='22' r='8' fill='%23fff' fill-opacity='.55'/%3E%3C/svg%3E">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Clown City">
+  <meta property="og:description" content="A clown on a unicycle: a bite-size browser platformer with three levels. Plays on phones and desktop.">
+  <meta property="og:url" content="https://clowncity.russelldangerr.com/">
+  <meta property="og:image" content="https://clowncity.russelldangerr.com/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -27,6 +37,7 @@
 
     html, body {
       height: 100vh;
+      height: 100dvh;   /* the VISIBLE height: excludes mobile browser toolbars */
       overflow: hidden;
       display: flex;
       justify-content: center;
@@ -87,6 +98,86 @@
         0 0 0 8px rgba(232,198,106,0.35),
         0 0 90px -12px rgba(232,198,106,0.45),
         0 36px 90px -24px #000;
+    }
+
+    [hidden] { display: none !important; }
+
+    /* ── Deck mode (touch, held upright): game across the top, deck below ── */
+    html.deck body {
+      flex-direction: column; justify-content: flex-start;
+      padding-top: env(safe-area-inset-top);
+    }
+    html.deck canvas {
+      border-radius: 0;
+      box-shadow: 0 2px 0 var(--gold), 0 8px 0 var(--oxblood), 0 9px 0 rgba(232,198,106,0.35);
+    }
+    #deck { display: none; }
+    html.deck #deck {
+      display: flex; flex-direction: column; flex: 1; align-self: stretch;
+      position: relative; z-index: 1;
+      padding: 12px 18px calc(18px + env(safe-area-inset-bottom));
+      touch-action: none; -webkit-user-select: none; user-select: none;
+      -webkit-touch-callout: none;
+    }
+    .deck-row { flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    .deck-arrows { display: flex; gap: 14px; }
+    .deck-btn {
+      width: 76px; height: 76px; border-radius: 50%;
+      font-family: 'Silkscreen', monospace; font-weight: 700; font-size: 26px;
+      color: var(--gold-brt);
+      background: radial-gradient(circle at 40% 35%, var(--velvet), var(--oxblood) 72%);
+      border: 2px solid var(--gold);
+      box-shadow: 0 0 0 5px var(--oxblood), 0 0 0 6px rgba(232,198,106,0.35), 0 10px 24px -8px #000;
+      touch-action: none; -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none; user-select: none; cursor: pointer;
+      transition: transform .06s ease;
+    }
+    .deck-btn.down { transform: scale(0.92); background: var(--maroon); }
+    .deck-jump { width: 112px; height: 112px; font-size: 18px; letter-spacing: 0.12em; }
+    .deck-pause {
+      align-self: flex-end; width: 64px; height: 64px; border-radius: 14px;
+      font-size: 16px; background: rgba(28,8,11,0.85);
+    }
+
+    /* ── Floating pause button (touch, sideways) ── */
+    #pause-btn {
+      display: none; position: fixed; z-index: 5;
+      top: calc(8px + env(safe-area-inset-top)); left: calc(8px + env(safe-area-inset-left));
+      width: 64px; height: 64px; border: none; border-radius: 50%;
+      background: radial-gradient(circle, rgba(28,8,11,0.85) 0 19px, var(--gold) 19px 21px, transparent 22px);
+      color: var(--gold-brt); font-size: 13px;
+      touch-action: none; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none;
+    }
+    html.touch:not(.deck) #pause-btn { display: block; }
+
+    /* ── Pause menu (every input) ── */
+    #pause-menu {
+      position: fixed; inset: 0; z-index: 20;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(11,5,7,0.72);
+      touch-action: none; -webkit-user-select: none; user-select: none;
+    }
+    .pm-panel {
+      display: flex; flex-direction: column; gap: 12px; min-width: 250px;
+      padding: 26px 34px 22px; text-align: center; border-radius: 8px;
+      background: radial-gradient(ellipse 90% 80% at 50% 40%, rgba(74,14,18,0.95), rgba(12,6,8,0.97));
+      box-shadow: 0 0 0 2px var(--gold), 0 0 0 7px var(--oxblood), 0 0 0 8px rgba(232,198,106,0.35), 0 30px 80px -20px #000;
+    }
+    .pm-title {
+      font-family: 'Ewert', serif; font-size: 44px; line-height: 1; margin-bottom: 6px;
+      color: var(--gold-brt); text-shadow: 0 2px 0 #b07a1e, 0 4px 0 #6e4a12;
+    }
+    .pm-panel button {
+      min-height: 52px; font-family: 'Cinzel', serif; font-weight: 700; font-size: 16px;
+      letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--ink); background: rgba(74,14,18,0.6);
+      border: 1px solid rgba(232,198,106,0.45); border-radius: 6px; cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .pm-panel button:hover, .pm-panel button:focus-visible { border-color: var(--gold); color: var(--gold-brt); outline: none; }
+    .pm-hint {
+      margin-top: 6px; max-width: 280px; font-family: 'Cinzel', serif; font-size: 11px;
+      letter-spacing: 0.14em; color: var(--ink); opacity: 0.55;
     }
 
     /* ── Splash / front door ── */
@@ -202,6 +293,30 @@
 
   <canvas id="game"></canvas>
 
+  <div id="deck" data-ui>
+    <button class="deck-btn deck-pause" id="btn-pause" aria-label="Pause">&#10074;&#10074;</button>
+    <div class="deck-row">
+      <div class="deck-arrows">
+        <button class="deck-btn" id="btn-left" aria-label="Turn left">&#9664;</button>
+        <button class="deck-btn" id="btn-right" aria-label="Turn right">&#9654;</button>
+      </div>
+      <button class="deck-btn deck-jump" id="btn-jump" aria-label="Jump">JUMP</button>
+    </div>
+  </div>
+
+  <button id="pause-btn" data-ui aria-label="Pause" hidden>&#10074;&#10074;</button>
+
+  <div id="pause-menu" data-ui role="dialog" aria-label="Paused" hidden>
+    <div class="pm-panel">
+      <div class="pm-title">Paused</div>
+      <button id="pm-resume">Resume</button>
+      <button id="pm-restart">Restart level</button>
+      <button id="pm-levels">Levels</button>
+      <button id="pm-sound">Sound: on</button>
+      <div class="pm-hint" id="pm-hint"></div>
+    </div>
+  </div>
+
   <div id="splash">
     <div class="curtain l"></div>
     <div class="curtain r"></div>
@@ -211,7 +326,7 @@
       <div class="rule"></div>
       <div class="sub">A&nbsp;&nbsp;UNICYCLE&nbsp;&nbsp;AUTO-RUNNER</div>
       <div class="cta">&#9656;&nbsp; PRESS <span>START</span> &nbsp;&#9666;</div>
-      <div class="hint">steer &#9666;&#9656; &nbsp;&middot;&nbsp; tap to jump &nbsp;&middot;&nbsp; tap your heading to spray</div>
+      <div class="hint" id="hint"></div>
     </div>
   </div>
 
@@ -224,6 +339,8 @@
   <script src="js/entities.js"></script>
   <script src="js/particles.js"></script>
   <script src="js/audio.js"></script>
+  <script src="js/layout.js"></script>
+  <script src="js/controls.js"></script>
   <script src="js/game.js"></script>
 
   <script>
@@ -231,6 +348,8 @@
     (function () {
       var splash = document.getElementById('splash');
       var marquee = document.getElementById('marquee');
+      // Controls hint for this device now (Layout keeps it current on resize).
+      document.getElementById('hint').textContent = Layout.hints[Layout.detect()].splash;
 
       // Confetti motes drifting behind everything
       var conf = document.getElementById('confetti');
@@ -294,6 +413,10 @@
         inputTypes.forEach(function (t) { window.removeEventListener(t, onInput, true); });
         // hand off to the game now (listeners are gone, so this reaches it)
         window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', key: ' ', bubbles: true }));
+        // …and let it go again: a click, tap or Enter never sends a Space keyup,
+        // so without this Input thinks Space is still held and swallows the
+        // first real Space press on level select.
+        window.dispatchEvent(new KeyboardEvent('keyup', { code: 'Space', key: ' ', bubbles: true }));
         splash.classList.add('go');
         setTimeout(function () { splash.style.display = 'none'; }, 1080);
       }

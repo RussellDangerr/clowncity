@@ -13,7 +13,7 @@ level list from 3 → 3 (merging two existing levels and slotting the new one).
 Add **verticality** to Clown City built on the existing momentum-as-resource
 identity. The player learns to **bomb downhill slopes to bank "overspeed"**
 (speed above the normal cap), then **cash that speed into a much larger jump**.
-The marquee moment is a final downhill that launches Bozo off a ramp lip and
+The marquee moment is a final downhill that launches Poko off a ramp lip and
 **arcs him into a circus tent** to win the level.
 
 A "jump so big you have to build up speed" is delivered by coupling three
@@ -167,7 +167,7 @@ Built temporarily as `maps[3]` (Level 4) during Phase A.
 - The **goal hitbox sits at the tent mouth**. The intended approach is the
   speed-jump arc off the final lip.
 - On entering the mouth, a **short win flourish** plays: tent curtain flaps,
-  confetti burst, Bozo is "swallowed" (fades / shrinks into the mouth), then the
+  confetti burst, Poko is "swallowed" (fades / shrinks into the mouth), then the
   normal level-complete state fires.
 - The win sequence is a brief timed state; it must not soft-lock if the player
   reaches the goal by an unexpected path (falling in, low-speed entry) — entering

@@ -1,5 +1,5 @@
-// ─── Player: Bozo on a unicycle — bidirectional auto-runner ───
-// Bozo is ALWAYS moving; the player only steers (swipe) and jumps (tap).
+// ─── Player: Poko on a unicycle — bidirectional auto-runner ───
+// Poko is ALWAYS moving; the player only steers (swipe) and jumps (tap).
 // Reversing direction is a weighty, momentum-based turnaround whose braking
 // lunge ("the wheel kicks out the old way") doubles as the attack.
 
@@ -72,7 +72,7 @@ const Player = {
   ledgeAssist: 2,         // extra pixels for ground check width
 
   // ── Wall-slide / wall-jump ──
-  // Bozo clings to a wall he's steering into while airborne, slides down at a
+  // Poko clings to a wall he's steering into while airborne, slides down at a
   // capped speed, and can wall-jump up-and-away. The jump FLIPS travelDir away
   // from the wall, so ricocheting between two close walls climbs a shaft.
   wallSlideSpeed: 120,     // px/s — max descent while clinging (lower = stickier)
@@ -104,7 +104,7 @@ const Player = {
   wallDir: 0,             // internal collision state (set in resolveCollisions)
   onSlope: false,         // grounded on a slope this frame (set in resolveSlopes)
   slopeDir: 0,            // sign of the slope under the feet (+1 rise-right)
-  facing: 1,              // FIXED visual facing — Bozo always faces the same way
+  facing: 1,              // FIXED visual facing — Poko always faces the same way
 
   // ── Unicycle run state ──
   travelDir: 1,           // committed direction of travel, never 0
@@ -163,6 +163,8 @@ const Player = {
   deathCount: 0,
   checkpointX: 0,
   checkpointY: 0,
+  finished: false,          // reached the goal: coasting to a stop, input ignored
+  hidden: false,            // swallowed by the tent (Big Drop finale): not drawn or updated
 
   // ── Hazard hitbox (smaller than platform hitbox for forgiving near-misses) ──
   hazardShrink: 3,          // pixels inset on each side
@@ -199,8 +201,11 @@ const Player = {
     this.wasGrounded = false;
     this.coyoteTimer = 0;
     // Restart the unicycle: slowly ramp forward (right) from a standstill.
+    // Reset the sticky steer too, or dying mid-leftward-turn respawns you
+    // immediately braking back to the left.
     this.travelDir = 1;
     this.desiredDir = 1;
+    Input.runDir = 1;
     this.runState = 'ramp';
     this.rampT = 0;
     this.brakeTimer = 0;
@@ -220,6 +225,8 @@ const Player = {
     this.lean = 0;
     this.leanTarget = 0;
     this.dead = false;
+    this.finished = false;
+    this.hidden = false;
     this.deathTimer = 0;
     this.respawning = true;
     this.respawnTimer = this.respawnDuration;
@@ -252,6 +259,33 @@ const Player = {
 
   respawn() {
     this.spawn(this.checkpointX, this.checkpointY);
+  },
+
+  // Called by Game on touching the goal. hide = swallowed by the tent.
+  finish(hide) {
+    this.finished = true;
+    this.hidden = !!hide;
+    this.attackDir = 0;
+    this.spinAttackTimer = 0;
+    if (this.hidden) this.trail.length = 0;
+  },
+
+  // Post-goal physics: no input, no hazards — brake to a stop under gravity.
+  _coast(dt) {
+    this.vx = approach(this.vx, 0, this.reverseDecel * dt);
+    const grav = this.vy < 0 ? this.gravityUp : this.gravityDown;
+    this.vy = Math.min(this.vy + grav * dt, this.maxFallSpeed);
+    this.x += this.vx * dt;
+    this.y += this.vy * dt;
+    this.resolveCollisions();
+    this.wheelAngle += (this.vx / this.wheelRadius) * dt;
+    this.lean += (0 - this.lean) * this.leanRate * dt;
+    this.squash += (1 - this.squash) * 14 * dt;
+    for (let i = this.trail.length - 1; i >= 0; i--) {
+      this.trail[i].alpha -= dt * 2;
+      if (this.trail[i].alpha <= 0) this.trail.splice(i, 1);
+    }
+    this.updateAnim(dt);
   },
 
   setCheckpoint(x, y) {
@@ -293,6 +327,12 @@ const Player = {
         this.respawn();
       }
       this.updateAnim(dt);
+      return;
+    }
+
+    // ── Finished: the goal was reached ──
+    if (this.finished) {
+      if (!this.hidden) this._coast(dt);
       return;
     }
 
@@ -480,7 +520,7 @@ const Player = {
     // ── Update animation state ──
     if (this.grounded) {
       if (!this.wasGrounded) this.setAnim('land');
-      else this.setAnim('run');            // Bozo is always rolling on the ground
+      else this.setAnim('run');            // Poko is always rolling on the ground
     } else if (this.vy < 0) {
       if (this.animState !== 'jump') this.setAnim('jump');
     } else {
@@ -592,6 +632,10 @@ const Player = {
     this.vx = away * this.wallJumpPushX;
     this.travelDir = away;
     this.desiredDir = away;
+    // The kick IS a steer: sync the sticky intent, or once wallJumpLockTime
+    // expires the brake check sees runDir still pointing at the old wall and
+    // U-turns Poko mid-air (a tap wall-jump could never climb a shaft).
+    Input.runDir = away;
     this.runState = 'cruise';
     this.rampT = 1;
     this.attackDir = 0;
@@ -721,7 +765,7 @@ const Player = {
           // Only grab a tile whose TOP is exposed to air — i.e. a REAL ledge.
           // A wall is a vertical stack of tiles, so every interior tile's "top"
           // is buried under the tile above it. Without this check, ledge-assist
-          // happily snapped Bozo onto a wall tile (grounded=true, vy=0) and
+          // happily snapped Poko onto a wall tile (grounded=true, vy=0) and
           // pinned him mid-air — which also let him jump off the wall. Reject
           // any tile that has a solid tile directly above (not a standable lip).
           const col = Math.floor(tile.x / Level.tileSize);
@@ -829,7 +873,7 @@ const Player = {
     }
   },
 
-  // A lunge hitbox extending from Bozo's center outward in `dir` by `reach`.
+  // A lunge hitbox extending from Poko's center outward in `dir` by `reach`.
   _lungeRect(dir) {
     const reach = 22;
     const hh = this.h * 0.9;                // most of the body, not just the low wheel
@@ -933,8 +977,8 @@ const Player = {
   },
 
   draw(ctx) {
-    // Don't draw during death (particles handle the visual)
-    if (this.dead) return;
+    // Don't draw during death (particles handle the visual) or once swallowed by the tent
+    if (this.dead || this.hidden) return;
 
     // Trail + afterimages
     for (const t of this.trail) {
@@ -993,7 +1037,7 @@ const Player = {
   _drawRectFallback(ctx) {
     // Procedural unicycle (no sprite sheet). Drawn in the leaned/squashed frame
     // set up by draw(), pivoting at the ground-contact point. Subtle & grounded:
-    // a small wheel, a short frame, Bozo perched just above. Hitbox is unchanged.
+    // a small wheel, a short frame, Poko perched just above. Hitbox is unchanged.
     const footX = this.x + this.w / 2;     // ground contact (pivot x)
     const footY = this.y + this.h;         // ground contact (pivot y)
     const r = this.wheelRadius;            // 8

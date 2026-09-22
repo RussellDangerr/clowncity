@@ -34,7 +34,6 @@
     const saved = { muted: Audio.muted, runDir: Input.runDir, buffer: Input.buffer };
     Audio.muted = true;
     Input.buffer = {};
-    Input.runDir = opts.runDir != null ? opts.runDir : 0;
     const jumpFrame = opts.jumpFrame != null ? opts.jumpFrame : -1;
     const jumpSet = new Set(opts.jumpFrames || []);
     if (jumpFrame >= 0) jumpSet.add(jumpFrame);
@@ -43,6 +42,7 @@
     const px = opts.x != null ? opts.x : map.spawn[0] * s;
     const py = opts.y != null ? opts.y : map.spawn[1] * s;
     Player.spawn(px, py);
+    Input.runDir = opts.runDir != null ? opts.runDir : 0;   // after spawn(), which resets it
     if (opts.skipRamp) { Player.runState = 'cruise'; Player.rampT = 1; }
     if (opts.vx != null) Player.vx = opts.vx;
 
