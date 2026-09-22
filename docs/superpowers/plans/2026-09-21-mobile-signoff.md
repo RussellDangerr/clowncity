@@ -197,8 +197,8 @@ and at the top of `loop(timestamp)`, right after `if (!this.running) return;`:
     async smoke() {
       assert(Engine.systems.length >= 8, `only ${Engine.systems.length} systems registered`);
       play(0); step(0.5);
-      assert(Player.x > Level.spawnX, 'Bozo should roll forward from spawn');
-      return `${Engine.systems.length} systems, Bozo rolled to x=${Math.round(Player.x)}`;
+      assert(Player.x > Level.spawnX, 'Poko should roll forward from spawn');
+      return `${Engine.systems.length} systems, Poko rolled to x=${Math.round(Player.x)}`;
     },
     // ── checks added by later tasks go here, in task order ──
   };
@@ -273,7 +273,7 @@ In `verify/play.js`:
 - [ ] **Step 4: Run the smoke check**
 
 Reload, then run `runChecks(['smoke'])`.
-Expected: `{"pass":true,"results":[{"name":"smoke","ok":true,"detail":"10 systems, Bozo rolled to x=…"}]}`
+Expected: `{"pass":true,"results":[{"name":"smoke","ok":true,"detail":"10 systems, Poko rolled to x=…"}]}`
 
 - [ ] **Step 5: Confirm the bot still passes**
 
@@ -365,7 +365,7 @@ const Layout = {
   scheme: 'keys',
   views: {
     normal: { w: 960, h: 540, lookahead: 60 },
-    deck:   { w: 640, h: 480, lookahead: 220 },   // lead further so Bozo sits left of centre
+    deck:   { w: 640, h: 480, lookahead: 220 },   // lead further so Poko sits left of centre
   },
   deckMinH: 200,      // px — the deck is never shorter than this
 
@@ -1139,7 +1139,7 @@ Add to `CHECKS`:
       }
       return out.join(' · ');
     },
-    // Warning = time from an obstacle entering the view to the moment Bozo acts
+    // Warning = time from an obstacle entering the view to the moment Poko acts
     // on it. Cruise speed must give >= 1.0s in deck mode; overspeed is reported.
     async warningTime() {
       const res = {};
@@ -1178,7 +1178,7 @@ launch) in the commit message.
 
 If `deck.cruise.t < 1.0`, raise `views.deck.lookahead` in `js/layout.js` by 20 and re-run
 Step 2. Stop at 260. If 260 still fails, stop and report the numbers to Caelan rather
-than going further, because a bigger lead pushes Bozo against the left edge.
+than going further, because a bigger lead pushes Poko against the left edge.
 
 - [ ] **Step 4: Commit**
 
@@ -1269,7 +1269,7 @@ Add to `CHECKS`:
         assert(atGoal, `${r.level}: Player.finished never set at the goal`);
         assert(!a.diedAfterGoal, `${r.level}: died after the goal`);
         if (Level.maps[i].tent) {
-          assert(a.hidden && a.x === +atGoal.x.toFixed(2) && a.y === +atGoal.y.toFixed(2), `${r.level}: Bozo should stay swallowed by the tent`);
+          assert(a.hidden && a.x === +atGoal.x.toFixed(2) && a.y === +atGoal.y.toFixed(2), `${r.level}: Poko should stay swallowed by the tent`);
         } else {
           assert(!a.offscreenBelow && a.grounded && Math.abs(a.vx) < 1, `${r.level}: should coast to a stop (got ${JSON.stringify(a)})`);
         }
@@ -1516,11 +1516,11 @@ Reload, run `runChecks(['meta'])`. Expected: `ok:false`, `favicon link missing`.
 In `index.html`, after `<title>Clown City</title>`:
 
 ```html
-  <meta name="description" content="Bozo the Clown on a unicycle: a bite-size browser platformer with three levels. Plays on phones and desktop.">
+  <meta name="description" content="Poko the Clown on a unicycle: a bite-size browser platformer with three levels. Plays on phones and desktop.">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='27' fill='%23e23b30'/%3E%3Ccircle cx='23' cy='22' r='8' fill='%23fff' fill-opacity='.55'/%3E%3C/svg%3E">
   <meta property="og:type" content="website">
   <meta property="og:title" content="Clown City">
-  <meta property="og:description" content="Bozo the Clown on a unicycle: a bite-size browser platformer with three levels. Plays on phones and desktop.">
+  <meta property="og:description" content="Poko the Clown on a unicycle: a bite-size browser platformer with three levels. Plays on phones and desktop.">
   <meta property="og:url" content="https://clowncity.russelldangerr.com/">
   <meta property="og:image" content="https://clowncity.russelldangerr.com/og.png">
   <meta property="og:image:width" content="1200">
@@ -1613,7 +1613,7 @@ Expected: a byte count (roughly 100–400 KB), and the background task prints `w
 - [ ] **Step 6: Look at it**
 
 `Read` `C:\Code\clowncity\og.png` and confirm what's in it. The title should be legible
-and the tent, chasm and Bozo visible. If not, adjust the `Camera.snapTo` / `Player.spawn`
+and the tent, chasm and Poko visible. If not, adjust the `Camera.snapTo` / `Player.spawn`
 positions in `og.js` and export again.
 
 - [ ] **Step 7: Run the check**
@@ -1679,7 +1679,7 @@ with:
 ```markdown
 combat = brake-lunge, spin-out spray (the lethal confetti IS the hitbox) and stomp, in
 `checkHazards()`; wall slide / wall-jump / rev-climb. A wall-jump and `spawn()` sync
-`Input.runDir` (else the sticky steer U-turns Bozo). `finish()` at the goal → coast to a
+`Input.runDir` (else the sticky steer U-turns Poko). `finish()` at the goal → coast to a
 stop (`hidden` for the tent).
 ```
 

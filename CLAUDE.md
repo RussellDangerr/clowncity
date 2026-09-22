@@ -1,6 +1,6 @@
 # Clown City — project memory
 
-A browser game: **Bozo the Clown on a unicycle**, a bidirectional auto-runner
+A browser game: **Poko the Clown on a unicycle**, a bidirectional auto-runner
 (as of v0.2.0). Vanilla JS, **no build step, no dependencies**. Open `index.html`
 in a browser to run; deployed live at clowncity.russelldangerr.com (main → Cloudflare).
 
@@ -18,10 +18,10 @@ in a browser to run; deployed live at clowncity.russelldangerr.com (main → Clo
   `Engine.width/height`; never hardcode the size.
 
 ## Key files
-- `js/player.js` — Bozo. Unicycle **momentum state machine** (`ramp`→`cruise`→`brake`),
+- `js/player.js` — Poko. Unicycle **momentum state machine** (`ramp`→`cruise`→`brake`),
   `approach()` helper. Combat = brake-lunge, spin-out spray (the lethal confetti IS the
   hitbox) and stomp, in `checkHazards()`; wall slide / wall-jump / rev-climb. A wall-jump
-  and `spawn()` sync `Input.runDir` (else the sticky steer U-turns Bozo). `finish()` at
+  and `spawn()` sync `Input.runDir` (else the sticky steer U-turns Poko). `finish()` at
   the goal → coast to a stop (`hidden` for the tent).
   `facing` is frozen (always faces one way); `travelDir` is the real direction.
   `resolveCollisions()` X-pass uses a **`stepTolerance` guard** (`overlapY > 8`) so flat

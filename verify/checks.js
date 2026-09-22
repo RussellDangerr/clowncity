@@ -105,8 +105,8 @@
     async smoke() {
       assert(Engine.systems.length >= 8, `only ${Engine.systems.length} systems registered`);
       play(0); step(0.5);
-      assert(Player.x > Level.spawnX, 'Bozo should roll forward from spawn');
-      return `${Engine.systems.length} systems, Bozo rolled to x=${Math.round(Player.x)}`;
+      assert(Player.x > Level.spawnX, 'Poko should roll forward from spawn');
+      return `${Engine.systems.length} systems, Poko rolled to x=${Math.round(Player.x)}`;
     },
     async layoutModes() {
       const root = document.documentElement;
@@ -254,7 +254,7 @@
       }
       return out.join(' · ');
     },
-    // Warning = time from an obstacle entering the view to the moment Bozo acts
+    // Warning = time from an obstacle entering the view to the moment Poko acts
     // on it. Cruise speed must give >= 1.0s in deck mode; overspeed is reported.
     async warningTime() {
       const res = {};
@@ -306,7 +306,7 @@
         assert(atGoal, `${r.level}: Player.finished never set at the goal`);
         assert(!a.diedAfterGoal, `${r.level}: died after the goal`);
         if (Level.maps[i].tent) {
-          assert(a.hidden && a.x === +atGoal.x.toFixed(2) && a.y === +atGoal.y.toFixed(2), `${r.level}: Bozo should stay swallowed by the tent`);
+          assert(a.hidden && a.x === +atGoal.x.toFixed(2) && a.y === +atGoal.y.toFixed(2), `${r.level}: Poko should stay swallowed by the tent`);
         } else {
           assert(!a.offscreenBelow && a.grounded && Math.abs(a.vx) < 1, `${r.level}: should coast to a stop (got ${JSON.stringify(a)})`);
         }

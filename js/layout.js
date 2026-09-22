@@ -13,7 +13,7 @@ const Layout = {
   // view is drawn ~0.59× on a phone, so unscaled 14px stats land at ~8px.
   views: {
     normal: { w: 960, h: 540, lookahead: 60,  uiScale: 1 },
-    deck:   { w: 640, h: 480, lookahead: 220, uiScale: 1.35 },   // lead further so Bozo sits left of centre
+    deck:   { w: 640, h: 480, lookahead: 220, uiScale: 1.35 },   // lead further so Poko sits left of centre
   },
   deckMinH: 200,      // px — the deck is never shorter than this
 

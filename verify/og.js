@@ -4,7 +4,7 @@
 (function () {
   window.renderOG = async function () {
     await document.fonts.ready;
-    const W = 1200, H = 630;                 // 1:1 world pixels — Bozo at full size
+    const W = 1200, H = 630;                 // 1:1 world pixels — Poko at full size
     const prev = { level: Game.currentLevel, state: Game.state };
     Engine.halted = true;
     try {

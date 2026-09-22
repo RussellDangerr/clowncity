@@ -42,7 +42,7 @@ Stored as hex strings (opaque fills) or `[r,g,b]` triples (use `Tokens.rgba(c, a
 | `kill` | `[255,120,80]` | enemy-defeat burst |
 | `enemy` / `enemyLight` / `enemyDark` | `#cc4444` / `#dd6666` / `#aa3333` | patrol enemy body/middle/legs |
 | `eyeWhite` / `eyePupil` | `#fff` / `#111` | enemy googly eyes |
-| `playerBody` / `playerEye` | `#e8e8f0` / `#1a1a2e` | Bozo rect-fallback |
+| `playerBody` / `playerEye` | `#e8e8f0` / `#1a1a2e` | Poko rect-fallback |
 | `trailGhost` / `trailDot` | `[180,200,255]` / `[200,220,255]` | motion trail + speed lines |
 | `white` | `[255,255,255]` | landing/jump dust, platform sparkles, flash |
 | `belt` | `[150,210,255]` | treadmill chevrons + belt dust |
@@ -98,7 +98,7 @@ reads from here.
 | Goal / checkpoint / gem | `level.js draw` | theme `goalColor`, `goldFlag` |
 | Treadmill | `level.js` + `player.js` | `treadmill[]`, `belt` |
 | Enemy (patrol) | `entities.js` | `enemy*`, `eyeWhite/eyePupil`; defeat → `kill`, `white` |
-| Player (Bozo) | `player.js` | `playerBody/playerEye`, `trail*`, `dust`, `danger` |
+| Player (Poko) | `player.js` | `playerBody/playerEye`, `trail*`, `dust`, `danger` |
 
 ---
 

@@ -15,7 +15,7 @@
 // the level is beatable with the touch input path, not just the keyboard.
 //
 // Bot knobs:
-//   lead       px before a pit edge / wall / enemy at which Bozo "sees" it
+//   lead       px before a pit edge / wall / enemy at which Poko "sees" it
 //   react      frames between seeing it and the input landing (reaction +
 //              tap latency — a tap registers on touchend, not touchstart)
 //   wallDelay  frames spent clinging before wall-jumping (18 = 150ms, human-ish)

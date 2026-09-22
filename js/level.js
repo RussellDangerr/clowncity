@@ -10,7 +10,7 @@ const Level = {
   // Tile legend:
   // 1 = solid, 0 = air, g = goal
   // c = checkpoint, o = collectible (gem)
-  // T = treadmill (caps Bozo's speed at 0.5 and bleeds momentum)
+  // T = treadmill (caps Poko's speed at 0.5 and bleeds momentum)
   // / = slope rising to the right, \ = slope rising to the left (45°)
   //     (authoring: a literal backslash must be written \\ inside the JS strings)
 

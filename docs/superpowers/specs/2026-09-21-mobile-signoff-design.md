@@ -10,7 +10,7 @@ rotate) as well as sideways — with nothing embarrassing on it.
 A headless full-level bot (`verify/play.js`, new) drove every level through the real
 engine with touch-equivalent input. Findings:
 
-- **Fixed already (verified, own commit):** a tap wall-jump U-turned Bozo back into the
+- **Fixed already (verified, own commit):** a tap wall-jump U-turned Poko back into the
   wall 0.12s after the kick (`_doWallJump` flipped `travelDir` but not the sticky
   `Input.runDir`), so shafts were only climbable by steering away; respawning after
   dying while heading left rode left. Both now sync `Input.runDir`. `verify/sim.js`
@@ -30,7 +30,7 @@ and re-evaluated on every `resize` (orientation changes fire it):
 | Mode | When | Internal canvas | Camera `lookaheadX` |
 |---|---|---|---|
 | **normal** | everything else (desktop any shape, phone sideways) | 960×540 (unchanged) | 60 (unchanged) |
-| **deck** | touch device held upright (phones, tablets) | **640×480** (4:3, 20 tiles wide) | tuned (≈220) so Bozo sits left of centre |
+| **deck** | touch device held upright (phones, tablets) | **640×480** (4:3, 20 tiles wide) | tuned (≈220) so Poko sits left of centre |
 
 - `Engine` gains a layout setter that switches `width`/`height`, reassigns the canvas
   bitmap and re-scales. All drawing already reads `Engine.width/height` (no literal
@@ -44,7 +44,7 @@ and re-evaluated on every `resize` (orientation changes fire it):
 - **No level or physics changes.** Only the view changes; everything the bot proved
   beatable stays beatable. Target: **≥ 1.0s of warning at cruise before every pit and
   enemy in deck mode**, measured, and `lookaheadX` tuned to meet it. (The camera's
-  smoothing trails a cruising Bozo by ~80px, so today's desktop view gives ≈1.07s,
+  smoothing trails a cruising Poko by ~80px, so today's desktop view gives ≈1.07s,
   not the 1.35s the no-lag arithmetic suggests; deck mode needs `lookaheadX` ≈ 220
   to match it.)
 
@@ -104,7 +104,7 @@ to jump · swipe your heading to spray". Keys: arrows / Space.
    also dispatches the matching `keyup` (today `Input.keys.Space` sticks and the first
    real Space on level select is swallowed after clicking the splash).
 2. **Goal behaviour:** on touching a goal, `Player.finish()` sets `finished`. While
-   finished, Bozo ignores input, skips hazards and brakes to a stop (`reverseDecel`);
+   finished, Poko ignores input, skips hazards and brakes to a stop (`reverseDecel`);
    gravity and collisions still run. `spawn()` clears it. On a `tent: true` level the
    player stays hidden and frozen after the finale. This fixes riding back down the Big
    Top shaft, falling forever off the Catwalk, and reappearing out of the tent.

@@ -1,6 +1,6 @@
 # Clown City
 
-Bozo the Clown on a unicycle — a momentum-based **auto-runner**. Bozo is always
+Poko the Clown on a unicycle — a momentum-based **auto-runner**. Poko is always
 rolling; you only steer (swipe) and jump (tap). Reverse into monsters to whack
 them with the unicycle wheel, or stomp them from above, across a lean
 platforming track.
@@ -26,7 +26,7 @@ Open `index.html` in a browser. No build step required.
 | Spray confetti | Press the arrow you're heading | Swipe the way you're heading | Press the arrow you're heading |
 | Pause (restart, levels, sound) | ❚❚ button | ❚❚ corner button | Esc / P |
 
-Reversing is a **weighty** turnaround: Bozo decelerates, pauses, then accelerates
+Reversing is a **weighty** turnaround: Poko decelerates, pauses, then accelerates
 the other way. The braking lunge — the wheel kicking out in the *old* direction —
 is an attack, and pressing the way you're already heading sprays confetti that
 kills whatever it lands on (it costs speed). You can also **stomp** enemies from
