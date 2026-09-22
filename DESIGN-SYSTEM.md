@@ -80,6 +80,7 @@ reads from here.
 | Group | Token | Value | Used for |
 |-------|-------|-------|----------|
 | `space` | `hudMargin` / `hudTop` | 16 / 24 | HUD insets |
+| `space` | `hudTouchLeft` | 112 | left HUD inset on touch screens (the floating pause button owns the corner) |
 | `space` | `cardW` / `cardH` / `cardGap` | 180 / 140 / 30 | level-select cards |
 | `motion` | `flashDecay` / `shakeDecay` | 6 / 8 | screen-flash & camera-shake fade |
 | `motion` | `parallaxX` / `parallaxY` | 3200 / 1000 | background dot tiling |

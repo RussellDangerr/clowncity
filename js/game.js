@@ -573,7 +573,9 @@ const Game = {
       ctx.fillStyle = Tokens.rgba(Tokens.color.danger, 0.7);
       ctx.font = Tokens.font.body;
       // Mini skull
-      const sx = 16, sy = 12;
+      // Sideways on touch, the floating pause button sits over this corner.
+      const sx = Layout.scheme === 'touch' ? Tokens.space.hudTouchLeft : Tokens.space.hudMargin;
+      const sy = 12;
       ctx.fillRect(sx + 2, sy, 8, 8);      // head
       ctx.fillRect(sx + 1, sy + 3, 10, 4); // jaw
       ctx.fillStyle = 'rgba(10,10,20,0.9)';
@@ -581,7 +583,7 @@ const Game = {
       ctx.fillRect(sx + 7, sy + 2, 2, 2);  // right eye
       ctx.fillRect(sx + 5, sy + 5, 2, 2);  // nose
       ctx.fillStyle = Tokens.rgba(Tokens.color.danger, 0.7);
-      ctx.fillText(Player.deathCount, 32, 24);
+      ctx.fillText(Player.deathCount, sx + 16, 24);
     }
 
     // Timer (top-center)

@@ -25,7 +25,7 @@
     const ctx = Engine.ctx, orig = ctx.fillText, seen = [];
     ctx.fillText = function (t, ...a) {
       const m = ctx.font.match(/(\d+(?:\.\d+)?)px/);
-      seen.push({ text: String(t), font: ctx.font, px: m ? parseFloat(m[1]) * ctx.getTransform().a : 0 });
+      seen.push({ text: String(t), font: ctx.font, px: m ? parseFloat(m[1]) * ctx.getTransform().a : 0, x: a[0], y: a[1] });
       return orig.call(this, t, ...a);
     };
     try {
@@ -374,6 +374,24 @@
         }
       }
       return 'panels behind finale + complete text; prompt per scheme; phone-sized stats';
+    },
+    // Sideways touch: the floating pause button (64px at the top-left) must not
+    // cover the death counter. Worst case is a 16:9 phone — no letterbox, the
+    // canvas is 667 css px wide, so the button reaches (8 + 64) × 960 / 667 ≈ 104
+    // canvas px in from the left.
+    async pauseOverlap() {
+      const reach = (8 + 64) * 960 / 667;
+      for (const s of ['touch', 'keys']) {
+        Layout.force = s; Layout.apply();
+        flat(); step(0.2);
+        Player.deathCount = 3;
+        const count = drawTexts().find(t => t.text === '3');
+        assert(count, `${s}: death counter not drawn`);
+        const skullLeft = count.x - 16;                   // the skull icon sits 16px left of the number
+        if (s === 'touch') assert(skullLeft >= reach, `touch: death counter at ${skullLeft}px is under the pause button (reaches ${reach.toFixed(0)}px)`);
+        else assert(skullLeft === Tokens.space.hudMargin, `desktop: death counter should stay at the ${Tokens.space.hudMargin}px margin (got ${skullLeft})`);
+      }
+      return `touch: counter clear of the button (>= ${reach.toFixed(0)}px); desktop unchanged`;
     },
     // ── checks added by later tasks go here, in task order ──
   };

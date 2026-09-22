@@ -85,6 +85,7 @@ const Tokens = {
   // ── Spacing / layout (px on the fixed 960×540 canvas) ──
   space: {
     hudMargin: 16,   // HUD inset from screen edges
+    hudTouchLeft: 112, // left HUD inset on touch screens: the floating pause button owns the corner
     hudTop:    24,   // HUD text baseline from top
     cardW:    180,   // level-select card
     cardH:    140,
