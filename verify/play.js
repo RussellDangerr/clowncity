@@ -30,6 +30,7 @@
   // Is there something to roll on in world column `px`, near feet height?
   // A drop of up to `drop` tiles still counts (downhill slopes, small steps).
   function supported(px, feetY, drop) {
+    if (Level.rampAt(px)) return true;            // a ramp is ridden however steep it gets
     const c = Math.floor(px / S());
     const r0 = Math.floor((feetY - 2) / S());
     for (let r = r0; r <= r0 + drop; r++) if (Level._isSolid(r, c)) return true;

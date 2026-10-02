@@ -27,7 +27,18 @@ in a browser to run; deployed live at clowncity.russelldangerr.com (main → Clo
   `resolveCollisions()` X-pass uses a **`stepTolerance` guard** (`overlapY > 8`) so flat
   floor seams aren't misread as walls — that was snagging momentum. Slope tiles live in
   `Level._slopeGrid` (excluded from `_tileGrid`); `Player.resolveSlopes()` runs AFTER the
-  square-tile passes so `stepTolerance` is never triggered by slopes. `Player.momentum` is
+  square-tile passes so `stepTolerance` is never triggered by slopes. It seats Poko on
+  slope tiles AND curved ramps (`surfaceSlope` = dy/dx under the feet). On any slope the
+  velocity runs **along the surface** (`vy = vx × slope`), so a lip launches Poko.
+  **Slopes trade height for speed** (`vx² += 2·slopeGravity·drop`, climbing takes it
+  back, the drive never drops below cruise), a slope *landing* pays out the height lost
+  since takeoff by the same rule, and overspeed is **kept in the air** (it only decays
+  on flat ground). No gameplay speed cap — `speedLimit` is a tunnelling guard only.
+  Design rule: **no fun stoppers** — never add caps/bleeds that make bigger or faster
+  worse. On a **launcher** ramp (one that curls up, `ramp.lip`), or any slope not heading
+  downhill, a press **loads** (`lipLoaded`, crouch) and fires at the lip, adding
+  `rampJumpPop` to the ramp's launch; a press up to `lipGrace` after the lip still pops,
+  peaking where an on-time press would. `Player.momentum` is
   clamped 0..1 (HUD/attack); `Player.overspeed` is a separate getter (0 at cruise, grows
   above it) feeding only the speed-scaled jump — keep these separate. The player draws as
   a **procedural unicycle** in `_drawRectFallback()` (spinning wheel + frame + body),
@@ -42,13 +53,23 @@ in a browser to run; deployed live at clowncity.russelldangerr.com (main → Clo
 - `js/controls.js` — DOM UI: the deck (◀ ▶ JUMP pause), the floating pause button
   (touch, sideways) and the pause menu, all wired as virtual keys; `update()` syncs the
   DOM to `Game.state`.
-- `js/level.js` — 3 levels: **The Big Top** (circus, 80 wide — the original intro),
+- `js/level.js` — 3 levels: **The Big Top** (circus, 213 wide — the teaching intro, one
+  idea at a time: pit, patrol, **boost belt** into a pit too wide for cruise, a small
+  **kicker** onto a ledge (free launch makes it; a press takes the high gem) with an
+  optional turnaround gem in the alcove under it, ferry, belt-into-kicker combo, wall-jump
+  shaft to the goal; beats spaced so overspeed fades to cruise before the next one),
   **The Catwalk** (harlequin, 112 wide — merged Stage+Workshop; mandatory + optional
   wall-jump shafts, elevated catwalk over a death-void with a ferry), **The Big Drop**
-  (midnight, 80 wide — rideable slopes / downhill overspeed / speed-jump → tent finale).
+  (midnight, 104 wide — one 16-tile curved ramp: drop / bowl / 45° lip → ~31-tile launch
+  over a pit → tent on a high mesa; unpressed the launch peaks ~2 tiles under the mesa,
+  a press anywhere on the ramp clears it by 3+ and takes the high gem). Ramps are a map's `ramps`
+  list of Hermite points `[tileX, tileY, slope]` (`Level.rampY/rampSlope/rampAt`); their
+  cells stay `0` in the grid but count as solid in `solidGrid` (edge drawing, the bot).
   Materials (`solid`, `treadmill`), themes, rendering. Tile legend: `1` solid, `0` air,
-  `T` treadmill, `g` goal, `c` checkpoint, `o` gem, `/` `\` slopes (rise right / rise
-  left, 45°). All maps 25 rows tall; floor on rows 22–24, spawn `[3,21]`.
+  `T` treadmill, `B` boost belt, `g` goal, `c` checkpoint (passing its column at any
+  height takes it), `o` gem, `/` `\` slopes (rise right / rise
+  left, 45°). All maps 25 rows tall; floor on rows 22–24, spawn `[3,21]` (the Big Drop
+  starts high on its plateau, spawn `[3,5]`).
 - `js/entities.js` — `MovingPlatform`, `OneWayPlatform`, `PatrolEnemy`, `Entities.kill()`.
 - `js/game.js` — state machine (title/levelSelect/playing/levelComplete/paused/win/tentFinale),
   HUD/menus. `title` is only the boot state under the marquee splash (nothing returns to
@@ -68,20 +89,24 @@ in a browser to run; deployed live at clowncity.russelldangerr.com (main → Clo
   that takes touches carries `data-ui`.
 
 ## Tuning knobs (all in `player.js` constants)
-`runSpeed` (400), `startRampTime` (1.5), `reverseDecel`/`reverseAccel`,
-`pauseAtZeroTime`, `treadmillCap` (200), `brakeWindow` (0.18), `jumpForce` (-480).
+`runSpeed` (400), `startRampTime` (1.5, level start), `respawnRampTime` (0.4),
+`reverseDecel`/`reverseAccel`, `pauseAtZeroTime`, `treadmillCap` (200), `boostSpeed` (680),
+`boostAccel` (1600), `brakeWindow` (0.18), `jumpForce` (-480).
 Combat / walls: `attackThreshold` (0.5), `spinAttackCost` (0.45), `wallSlideSpeed` (120),
 `wallJumpForceY` (-440), `wallJumpPushX` (300), `revClimbSpeed` (280).
-Collision/feel: `stepTolerance` (8, the flat-ground snag guard). Unicycle sway:
+Collision/feel: `stepTolerance` (8, the flat-ground snag guard), `coyoteTime` (0.06),
+`Input.bufferTime` (0.1, the jump buffer). Unicycle sway:
 `cruiseLean` (0.10), `brakeLean` (0.14), `leanRate` (10), `wheelRadius` (8).
-Slopes / banked overspeed (Big Drop): `overspeedCap` (720), `slopeAccel` (800),
-`slopeUphillDrag` (600), `overspeedDecay` (500), `jumpSpeedBonus` (380, scales the
-launch from −480 cruise to ≈−860 at full overspeed), `slopeSnap` (8).
+Slopes / overspeed (Big Drop): `slopeGravity` (600, height→speed), `overspeedDecay`
+(500, flat ground only), `speedLimit` (1500, tunnelling guard), `jumpSpeedBonus` (380 per
+`jumpBonusSpan` 320 of overspeed, no ceiling), `slopeSnap` (8). Ramp launch:
+`rampJumpPop` (280), `lipLoadSlope` (0.2), `lipGrace` (0.15 s).
 
 ## Verifying changes
 No test framework. Run `index.html` (the preview server on 8081), then in the page:
 - `verify/checks.js` — `runChecks()` regression checks (layout, deck, pause, hints,
-  goal, win, meta, warning time, all levels in both layouts). Reload the page first.
+  goal, win, meta, warning time, coyote window, respawn wall state, Big Drop ramp
+  launch, all levels in both layouts). Reload the page first.
 - `verify/play.js` — `playLevel(i, opts)` full-level bot through the real engine with
   touch-equivalent input.
 - `verify/sim.js` — Player-only physics on a scratch map.

@@ -8,6 +8,15 @@
 // independent of real time. A scratch map named '__sim__' is appended to
 // Level.maps and reused across runs.
 //
+// Options: rows, spawn | x,y, vx, runDir, skipRamp, frames, sample, entities, ramps,
+//   jumpFrame / jumpFrames   press jump on these frames
+//   steer  {frame: dir}      set the sticky steer (a held key)
+//   swipe  {frame: dir}      steer + the one-frame swipe edge (spin-out, steer-off wall-jump)
+//   before(frame)            runs before each step; return 'jump' to press jump
+//   stepEntities             also step Entities (patrols stand still otherwise)
+// Player.spawn() leaves 0.3s of respawn invulnerability during which nothing
+// can be killed either — clear Player.respawning in before(0) for combat runs.
+//
 // Input is a top-level `const` (not a window property), so it can't be swapped
 // out — player.js closes over the real object. Instead we drive that real
 // `Input`: set its sticky `runDir`, and arm its jump buffer on a chosen frame.
@@ -23,6 +32,7 @@
       theme: opts.theme || 'circus',
       spawn: opts.spawn || [2, 0],
       entities: opts.entities || [],
+      ramps: opts.ramps || [],
       data: opts.rows,
     };
     let idx = Level.maps.findIndex(m => m.name === '__sim__');
@@ -49,12 +59,21 @@
     const frames = opts.frames || 240;
     const sample = opts.sample || 1;
     const trace = [];
+    Particles.pool.length = 0;                    // no lethal spray left over from the last run
     try {
       for (let f = 0; f < frames; f++) {
         if (opts.steer && opts.steer[f] != null) Input.runDir = opts.steer[f];
+        // A swipe: steers AND raises the single-frame edge (spin-out / steer-off wall-jump).
+        if (opts.swipe && opts.swipe[f] != null) { Input.runDir = opts.swipe[f]; Input._swipeEdge = opts.swipe[f]; }
         if (jumpSet.has(f)) Input.buffer.Jump = Input.bufferTime;   // arm a jump this frame
+        // before(f) may press input from live state; returning 'jump' arms a jump.
+        if (opts.before && opts.before(f) === 'jump') Input.buffer.Jump = Input.bufferTime;
+        if (opts.stepEntities) Entities.update(Engine.fixedDt);
+        Particles.update(Engine.fixedDt);         // the spray is the hitbox, so it must move
         Player.update(Engine.fixedDt);
-        // Tick the jump buffer down like Input.update would (it's not in this loop).
+        // Tick the jump buffer down and clear the single-frame edge like
+        // Input.update would (it's not in this loop).
+        Input._swipeEdge = 0;
         for (const k in Input.buffer) {
           Input.buffer[k] -= Engine.fixedDt;
           if (Input.buffer[k] <= 0) delete Input.buffer[k];
@@ -66,9 +85,12 @@
             vx: +Player.vx.toFixed(2), vy: +Player.vy.toFixed(2),
             grounded: Player.grounded,
             onSlope: !!Player.onSlope,
-            slopeDir: Player.slopeDir || 0,
+            slope: +(Player.surfaceSlope || 0).toFixed(3),
             momentum: +Player.momentum.toFixed(3),
             overspeed: +((Player.overspeed || 0)).toFixed(3),
+            travelDir: Player.travelDir, runState: Player.runState,
+            wall: Player.wallSliding, dead: Player.dead,
+            enemies: Entities.list.filter(e => e.getHazardRect).length,
           });
         }
       }

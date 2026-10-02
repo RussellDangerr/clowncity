@@ -59,6 +59,8 @@ const Tokens = {
     white:     [255, 255, 255],
     belt:      [150, 210, 255],                 // treadmill chevrons + belt dust
     treadmill: ['#2a3a4a', '#34495e', '#46627e'], // treadmill tile [dark, mid, light]
+    boost:     ['#5c3a12', '#7d5419', '#b07a24'], // boost belt tile [dark, mid, light]
+    boostGlow: [255, 205, 90],                   // boost-belt chevrons + sparks
     tentRed:   '#b5202a',  // circus tent stripe (red)
     tentCream: '#f3e2b8',  // circus tent stripe (cream)
     tentMouth: '#140a16',  // dark tent entrance

@@ -393,6 +393,79 @@
       }
       return `touch: counter clear of the button (>= ${reach.toFixed(0)}px); desktop unchanged`;
     },
+    // Coyote time: a jump pressed just after rolling off a ledge still launches,
+    // for the whole coyoteTime window (it was once a single frame), then stops;
+    // and a second press in the air is not a double jump.
+    async coyote() {
+      const rows = [];
+      for (let r = 0; r < 25; r++) rows.push(r >= 22 ? '1'.repeat(20) + '0'.repeat(60) : '0'.repeat(80));
+      Level.maps.push({ name: '__ledge__', theme: 'circus', spawn: [14, 21], entities: [], data: rows });
+      const li = Level.maps.length - 1;
+      const dt = Engine.fixedDt, win = Player.coyoteTime / dt;
+      // Roll off the ledge at cruise, press jump `n` frames after the ground is gone.
+      const late = (n) => {
+        play(li); cleanInput();
+        Player.runState = 'cruise'; Player.rampT = 1; Player.vx = Player.runSpeed;
+        let f = 0;
+        while (!Player.grounded && f++ < 60) step(dt);
+        while (Player.grounded && f++ < 240) step(dt);
+        assert(!Player.grounded && !Player.dead, 'Poko never rolled off the ledge');
+        for (let i = 1; i < n; i++) step(dt);
+        Input.tapKey('Space'); step(dt);
+        return Player.vy < -300;
+      };
+      try {
+        const inside = Math.max(1, Math.floor(win) - 1), outside = Math.ceil(win) + 1;
+        assert(late(1), 'no jump 1 frame after the ledge');
+        assert(late(inside), `no jump ${inside} frames after the ledge (window is ${win.toFixed(1)} frames)`);
+        assert(!late(outside), `jumped ${outside} frames after the ledge (window is ${win.toFixed(1)} frames)`);
+        late(inside); step(10 * dt);
+        Input.tapKey('Space'); step(dt);
+        assert(Player.vy > Player.jumpForce * 0.85, `second press re-launched in the air (vy ${Player.vy.toFixed(0)})`);
+        return `jumps up to ${inside} frames late, not ${outside}; no double jump`;
+      } finally {
+        Level.maps.splice(li, 1);
+      }
+    },
+    // A respawn forgets the wall Poko was touching: restarting mid wall-slide with
+    // jump held used to wall-jump off thin air, backwards, on the first frame.
+    async spawnForgetsWall() {
+      flat(); step(0.3);
+      Player.wallDir = 1;                                   // as if clinging to a wall on the right
+      Player.spawn(Level.spawnX, Level.spawnY);
+      Input.tapKey('Space'); step(Engine.fixedDt);
+      assert(Player.travelDir === 1 && Player.vx >= 0, `respawn wall-jumped off nothing (travelDir ${Player.travelDir}, vx ${Player.vx.toFixed(0)})`);
+      return 'no phantom wall-jump on respawn';
+    },
+    // The Big Drop ramp: rolling off the lip launches Poko but NOT onto the tent
+    // ledge; a press anywhere from the bottom of the bowl to the lip (loaded, it
+    // fires at the lip) makes it.
+    async rampLaunch() {
+      const i = Level.maps.findIndex(m => m.name === 'The Big Drop');
+      play(i);
+      const ramp = Level.ramps[0];
+      const bowl = ramp.pts.reduce((a, p) => (p.y > a.y ? p : a));        // lowest point
+      const ride = (pressAt) => {
+        play(i); cleanInput();
+        let pressed = pressAt == null, launch = null;
+        for (let f = 0; f < 12 * 120; f++) {
+          if (!pressed && Player.grounded && Player.x + Player.w / 2 >= pressAt) { Input.tapKey('Space'); pressed = true; }
+          const wasGrounded = Player.grounded;
+          step(Engine.fixedDt);
+          if (!launch && wasGrounded && !Player.grounded && Player.x > bowl.x) launch = { vx: Player.vx, vy: Player.vy };
+          if (Player.dead) return { made: false, launch };
+          if (Game.state === 'tentFinale') return { made: true, launch };
+        }
+        return { made: false, launch };
+      };
+      const free = ride(null);
+      assert(free.launch && free.launch.vy < -300, `rolling off the lip should launch upward (vy ${free.launch && free.launch.vy.toFixed(0)})`);
+      assert(!free.made, 'rolling off the lip with no press reached the tent — the press should matter');
+      for (const x of [bowl.x, (bowl.x + ramp.x1) / 2, ramp.x1 - 4]) {            // bowl, mid kicker, lip
+        assert(ride(x).made, `a press at x=${Math.round(x)} (bowl→lip) didn't reach the tent`);
+      }
+      return `free launch ${free.launch.vx.toFixed(0)}/${free.launch.vy.toFixed(0)} px/s falls short; presses at the bowl, kicker and lip all reach the tent`;
+    },
     // ── checks added by later tasks go here, in task order ──
   };
 

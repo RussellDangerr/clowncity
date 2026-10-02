@@ -39,6 +39,9 @@ const Player = {
   zeroEpsilon: 12,          // |vx| under this counts as "stopped"
   treadmillCap: 200,        // 0.5 * runSpeed — speed cap while on a treadmill
   treadmillDamp: 3000,      // px/s^2 — damp toward the cap (non-directional)
+  boostSpeed: 680,          // px/s — a boost belt drives Poko up to this (1.7x cruise)
+  boostAccel: 1600,         // px/s^2 — how hard the belt pushes (cruise → boost in ~0.18s)
+  respawnRampTime: 0.4,     // s — standstill → cruise after a respawn (startRampTime is the level start)
   brakeWindow: 0.18,        // max lifetime of the wheel-throw attack hitbox
 
   // ── Spin-out attack (tap your CURRENT direction with momentum) ──
@@ -51,15 +54,18 @@ const Player = {
 
   // ── Jump tuning (fixed-height tap jump) ──
   jumpForce: -480,
-  jumpSpeedBonus: 380,       // px/s extra upward launch at full overspeed (≈ -860 total)
+  jumpSpeedBonus: 380,       // px/s extra upward launch per jumpBonusSpan of overspeed — no ceiling
+  jumpBonusSpan: 320,        // px/s over cruise that earns one full jumpSpeedBonus (720 → −860)
+  rampJumpPop: 280,          // px/s a press adds on top of a ramp's own upward launch
+  lipLoadSlope: 0.2,         // on a slope and not descending steeper than this (≈11°), a press loads until the lip
+  lipGrace: 0.15,            // s after flying off a launcher's lip that a press still adds the pop
   gravityUp: 1300,           // gravity while rising (lighter, floaty arc)
   gravityDown: 2100,         // gravity while falling (1.6x — snappy descent)
 
   // ── Slopes / overspeed (the downhill bomb that powers the big jump) ──
-  overspeedCap: 720,        // px/s — max |vx| reachable on a downhill (1.8x runSpeed)
-  slopeAccel: 800,          // px/s^2 — speed gained while bombing downhill
-  slopeUphillDrag: 600,     // px/s^2 — speed bled while climbing a slope
-  overspeedDecay: 500,      // px/s^2 — decay back to runSpeed on flat ground/air
+  slopeGravity: 600,        // px/s^2 — height→speed on slopes: dropping h px gives vx² += 2·g·h
+  overspeedDecay: 500,      // px/s^2 — decay back to runSpeed on flat ground (kept in the air)
+  speedLimit: 1500,         // px/s — tunnelling guard only (<13px/frame for a 14px body); no ramp gets near it
 
   // ── Coyote time / jump buffer ──
   coyoteTime: 0.06,      // ~7 frames at 120Hz
@@ -89,8 +95,8 @@ const Player = {
   // real step, so flat ground never snags momentum but real walls still stop us.
   stepTolerance: 8,
 
-  slopeSnap: 8,           // px — stick distance to a slope surface (must exceed the
-                          // max per-frame horizontal step: overspeedCap/120 = 6px)
+  slopeSnap: 8,           // px — stick distance to a slope surface. The tangent velocity
+                          // already tracks the surface; this only covers curvature.
 
   // ── Unicycle visual (roll + momentum sway) ──
   wheelRadius: 8,
@@ -100,10 +106,12 @@ const Player = {
 
   // ── State ──
   grounded: false,
-  wasGrounded: false,     // for coyote: only grant when walking off, not jumping off
+  wasGrounded: false,     // grounded on the previous frame (landing detection)
   wallDir: 0,             // internal collision state (set in resolveCollisions)
   onSlope: false,         // grounded on a slope this frame (set in resolveSlopes)
-  slopeDir: 0,            // sign of the slope under the feet (+1 rise-right)
+  surfaceSlope: 0,        // dy/dx of the surface under the feet (+ = downhill to the right; 45° = ±1)
+  ramp: null,             // the curved ramp under the feet, if that's what he's riding
+  groundY: 0,             // y when last grounded (a slope landing pays out the height lost since)
   facing: 1,              // FIXED visual facing — Poko always faces the same way
 
   // ── Unicycle run state ──
@@ -111,9 +119,12 @@ const Player = {
   desiredDir: 1,          // last steer intent
   runState: 'ramp',       // 'ramp' | 'cruise' | 'brake'
   rampT: 0,               // 0..1 start-ramp progress
+  rampTime: 1.5,          // seconds this start-ramp takes (level start vs respawn)
   brakeTimer: 0,          // counts down the wheel-throw window during a brake
   pausedAtZero: 0,        // commit-beat accumulator at the bottom of a reversal
   attackDir: 0,           // wheel-throw direction (= old travelDir); 0 = inactive
+  lipLoaded: false,       // a jump pressed on a kicker, waiting to fire at the lip
+  lipGraceTimer: 0,       // counts down after flying off a launcher's lip (a late press still pops)
 
   // ── Wall-slide / wall-jump state ──
   wallSliding: false,     // currently clinging to a wall this frame
@@ -192,9 +203,10 @@ const Player = {
     return Math.max(0, (Math.abs(this.vx) - this.runSpeed) / this.runSpeed);
   },
 
-  spawn(x, y) {
+  spawn(x, y, rampTime) {
     this.x = x;
     this.y = y;
+    this.rampTime = rampTime || this.startRampTime;
     this.vx = 0;
     this.vy = 0;
     this.grounded = false;
@@ -215,8 +227,13 @@ const Player = {
     this.wallStickTimer = 0;
     this.wallJumpLockTimer = 0;
     this.wallContactDir = 0;
+    this.wallDir = 0;          // else a wall touched before the respawn reads as a cling on frame 1
+    this.lipLoaded = false;
+    this.lipGraceTimer = 0;
     this.onSlope = false;
-    this.slopeDir = 0;
+    this.surfaceSlope = 0;
+    this.ramp = null;
+    this.groundY = y;
     this.spinAttackTimer = 0;
     this.spinAttackDir = 0;
     this._spinCooldown = 0;
@@ -258,7 +275,7 @@ const Player = {
   },
 
   respawn() {
-    this.spawn(this.checkpointX, this.checkpointY);
+    this.spawn(this.checkpointX, this.checkpointY, this.respawnRampTime);   // back up to speed quickly
   },
 
   // Called by Game on touching the goal. hide = swallowed by the tent.
@@ -366,10 +383,12 @@ const Player = {
 
     // ── Unicycle momentum driver (replaces free-move accel/friction) ──
     const onTreadmill = this.grounded && this.groundMaterial === 'treadmill';
+    const onBoost = this.grounded && this.groundMaterial === 'boost';
 
     if (this.runState === 'ramp') {
-      // Level start: ease from a standstill up to full speed.
-      this.rampT = Math.min(1, this.rampT + dt / this.startRampTime);
+      // Level start (slow, a beat to settle in) or respawn (quick): ease from a
+      // standstill up to full speed.
+      this.rampT = Math.min(1, this.rampT + dt / this.rampTime);
       const target = this.travelDir * this.runSpeed * this.rampT;
       this.vx = approach(this.vx, target, this.accelRate * dt);
       if (this.rampT >= 1) this.runState = 'cruise';
@@ -393,35 +412,42 @@ const Player = {
       // Cruise: build toward top speed along a DELIBERATE eased curve — speed is
       // something you spin up and feel, not instant. Reversing drops you low so
       // you re-earn it; attacks and wall rev-climbs spend it.
+      // Faster than cruise in the air or on a slope, speed belongs to gravity, not
+      // the wheel's drive: leave it alone so a drop pays out and a flight carries it.
+      const coasting = this.vx * this.travelDir > this.runSpeed && (!this.grounded || this.onSlope || onBoost);
       const targetVx = this.travelDir * this.runSpeed;
       const frac = Math.min(1, Math.abs(this.vx) / this.runSpeed);
       const accel = this.cruiseAccel * (1 - 0.5 * frac);   // eases as you near the top
-      this.vx = approach(this.vx, targetVx, accel * dt);
+      if (!coasting) this.vx = approach(this.vx, targetVx, accel * dt);
     }
 
     // Treadmill: cap and damp speed toward 0.5, non-directional (only slows).
     if (onTreadmill && Math.abs(this.vx) > this.treadmillCap) {
       this.vx = approach(this.vx, Math.sign(this.vx) * this.treadmillCap, this.treadmillDamp * dt);
     }
+    // Boost belt: drive up to boostSpeed whichever way he's rolling (never slows
+    // him — already faster stays faster). Off the belt the overspeed is the usual
+    // kind: kept in the air, so jumping off the end carries it.
+    if (onBoost && this.runState !== 'brake' && this.vx * this.travelDir < this.boostSpeed) {
+      this.vx = approach(this.vx, this.travelDir * this.boostSpeed, this.boostAccel * dt);
+    }
 
-    // ── Slope speed-transfer + perishable overspeed ──
-    // onSlope/slopeDir come from the previous frame's resolveSlopes (the same
-    // one-frame-late model grounded/wallDir use). Downhill builds speed past the
-    // cap; uphill bleeds; on flat/air any overspeed decays back to runSpeed.
-    // NOTE: the cruise driver above already nudges vx toward runSpeed every frame
-    // (~210 px/s^2 at the top), so the REALIZED rates here are offset by that:
-    // effective downhill build ≈ slopeAccel-210, effective flat decay ≈
-    // overspeedDecay+210. Keep that in mind when tuning these constants by feel.
-    if (this.grounded && this.onSlope && this.slopeDir !== 0 && Math.abs(this.vx) > this.zeroEpsilon) {
-      const sign = Math.sign(this.vx);
-      const goingDownhill = sign === -this.slopeDir;
-      if (goingDownhill) {
-        this.vx += sign * this.slopeAccel * dt;
-        if (Math.abs(this.vx) > this.overspeedCap) this.vx = sign * this.overspeedCap;
-      } else {
-        this.vx -= sign * this.slopeUphillDrag * dt;
-      }
-    } else if (Math.abs(this.vx) > this.runSpeed) {
+    // ── Slopes trade height for speed; overspeed is perishable on flat ground ──
+    // onSlope/surfaceSlope come from the previous frame's resolveSlopes (the same
+    // one-frame-late model grounded/wallDir use). HEIGHT, not time: dropping h px
+    // adds speed as if falling it (vx² += 2·slopeGravity·h) and climbing takes it
+    // back, so a taller drop is always faster, and a long gentle ramp is as fast
+    // as a short steep one of the same height. The wheel's drive never loses
+    // ground to a climb (Poko keeps at least cruise), so no hill can stall him.
+    // In the air overspeed is kept (see cruise), so a launch carries it.
+    const s = this.surfaceSlope;
+    if (this.grounded && this.onSlope && s !== 0) {
+      const sign = Math.sign(this.vx) || this.travelDir;
+      const drop = this.vx * s * dt;                       // px descended this frame (- = climbed)
+      let v = Math.sqrt(Math.max(0, this.vx * this.vx + 2 * this.slopeGravity * drop));
+      if (sign === this.travelDir) v = Math.max(v, Math.min(Math.abs(this.vx), this.runSpeed));
+      this.vx = sign * Math.min(v, this.speedLimit);
+    } else if (this.grounded && !onBoost && Math.abs(this.vx) > this.runSpeed) {
       this.vx = approach(this.vx, Math.sign(this.vx) * this.runSpeed, this.overspeedDecay * dt);
     }
 
@@ -429,12 +455,19 @@ const Player = {
     const grav = this.vy < 0 ? this.gravityUp : this.gravityDown;
     this.vy += grav * dt;
     if (this.vy > this.maxFallSpeed) this.vy = this.maxFallSpeed;
+    // On a slope the velocity runs ALONG the surface. That's what makes a ramp a
+    // ramp: rolling off a lip keeps the upward part and launches Poko, and
+    // rolling off the bottom keeps the downward part instead of floating.
+    if (this.grounded && this.onSlope) this.vy = this.vx * s;
 
-    // ── Coyote time (only when walking off, not jumping off) ──
+    // ── Coyote time (a jump still counts for a moment after rolling off a ledge) ──
     if (this.grounded) {
       this.coyoteTimer = this.coyoteTime;
+      this.lipGraceTimer = 0;
+      this.groundY = this.y;                 // takeoff height, for a landing's payout
     } else {
       this.coyoteTimer -= dt;
+      if (this.lipGraceTimer > 0) this.lipGraceTimer -= dt;
     }
 
     // ── Wall-slide detection ──
@@ -478,9 +511,29 @@ const Player = {
       (awayDir < 0 && (Input.pressed('ArrowLeft')  || Input.pressed('KeyA')))
     );
 
+    // ── Loaded jump on a kicker ──
+    // Anywhere on a ramp that launches the way he's going (or on any slope that
+    // isn't heading downhill), a press loads the jump (Poko crouches) and fires
+    // the moment that stops being true — normally as he leaves the lip. So on a
+    // launcher, jump always means "spring at the lip": early or mashed presses
+    // still get the full launch instead of a hop off the drop.
+    const onLauncher = this.ramp && this.ramp.lip === this.travelDir;
+    const climbing = this.grounded && this.onSlope &&
+      (Math.sign(this.vx) * this.surfaceSlope < this.lipLoadSlope || onLauncher);
+    if (this.lipLoaded && !climbing) {
+      this.lipLoaded = false;
+      if (this.grounded || this.coyoteTimer > 0) this._doGroundJump();
+    }
+    if (this.lipLoaded) this.squashTarget = 0.8;
+
     // ── Jump: ground / coyote, else a wall-jump (from a jump input OR steering off) ──
     if (jumpBuffered) {
-      if (this.grounded || (this.coyoteTimer > 0 && this.wasGrounded)) {
+      // coyoteTimer alone is the guard: both jumps zero it, so it can't double-jump.
+      // (An extra `wasGrounded` test here cut the window to a single frame.)
+      if (climbing) {
+        this.lipLoaded = true;
+        Input.consumeJump();
+      } else if (this.grounded || this.coyoteTimer > 0 || this.lipGraceTimer > 0) {
         this._doGroundJump();
       } else if (onWall || this.wallStickTimer > 0) {
         this._doWallJump();
@@ -492,12 +545,20 @@ const Player = {
     // ── Apply velocity ──
     this.wasGrounded = this.grounded;
     const prevWallDir = this.wallDir;            // wall contact from LAST frame
+    const prevRamp = this.ramp;                  // ramp ridden LAST frame
     const speedAtContact = Math.abs(this.vx);    // speed we may slam a wall with this frame
     this.x += this.vx * dt;
     this.y += this.vy * dt;
 
     // ── Resolve collisions (with corner correction) ──
     this.resolveCollisions();
+
+    // Flew off a launcher's lip without jumping (coyote untouched): a press in the
+    // next lipGrace seconds still adds the pop — being a beat late isn't a miss.
+    if (prevRamp && prevRamp.lip === this.travelDir && !this.grounded && this.vy < 0 && this.coyoteTimer > 0) {
+      const cx = this.x + this.w / 2;
+      if (prevRamp.lip > 0 ? cx > prevRamp.x1 : cx < prevRamp.x0) this.lipGraceTimer = this.lipGrace;
+    }
 
     // ── Speed → wall rev-climb (augments wall-slide / wall-jump) ──
     // A NEW head-on wall contact while airborne, arriving with momentum, revs
@@ -597,15 +658,39 @@ const Player = {
         );
       }
     }
+
+    // ── Boost-belt sparks (flung back off the wheel) ──
+    if (onBoost) {
+      this._sparkTimer += dt;
+      if (this._sparkTimer > 0.025) {
+        this._sparkTimer = 0;
+        const dir = this.travelDir;
+        Particles.emit(
+          this.x + this.w / 2 - dir * 4, this.y + this.h,
+          -dir * (120 + Math.random() * 160), -(40 + Math.random() * 90),
+          Tokens.rgba(Tokens.color.boostGlow, 0.8), 0.2 + Math.random() * 0.15
+        );
+      }
+    }
   },
 
   _doGroundJump() {
-    const denom = (this.overspeedCap - this.runSpeed) || 1;
-    const overFrac = Math.max(0, Math.min(1, (Math.abs(this.vx) - this.runSpeed) / denom));
-    this.vy = this.jumpForce - this.jumpSpeedBonus * overFrac;
+    const overFrac = Math.max(0, (Math.abs(this.vx) - this.runSpeed) / this.jumpBonusSpan);
+    const jump = this.jumpForce - this.jumpSpeedBonus * overFrac;
+    // Already rising (riding up a ramp, or just off its lip): the press pops on
+    // top of that launch instead of replacing it. Late off a lip, the pop also
+    // makes up the height it missed (pop × time late), so the arc peaks exactly
+    // where a press AT the lip would have.
+    let vy = this.vy - this.rampJumpPop;
+    if (this.lipGraceTimer > 0) {
+      const lateBy = this.lipGrace - this.lipGraceTimer;
+      vy = -Math.sqrt(vy * vy + 2 * this.gravityUp * this.rampJumpPop * lateBy);
+    }
+    this.vy = this.vy < 0 ? Math.min(jump, vy) : jump;
+    this.lipGraceTimer = 0;
     if (overFrac > 0.4) {
       this.squash = 1.5;
-      Camera.shake(3 + overFrac * 4);
+      Camera.shake(3 + Math.min(1, overFrac) * 4);
       this._carnivalSpray(this.travelDir);   // charged launch throws confetti
     } else {
       this.squash = 1.4;
@@ -644,6 +729,7 @@ const Player = {
     this.wallSliding = false;
     this.grounded = false;
     this.coyoteTimer = 0;
+    this.lipGraceTimer = 0;
     this.squash = 1.4;
     this.setAnim('jump');
     Audio.jump();
@@ -840,36 +926,52 @@ const Player = {
     this.resolveSlopes();
   },
 
-  // Seat the player on a slope surface. Runs AFTER the square-tile passes;
-  // slope tiles are not in the square grid, so they never trigger wall logic.
+  // Seat the player on a slope surface — a 45° slope tile or a curved ramp.
+  // Runs AFTER the square-tile passes; neither is in the square grid, so they
+  // never trigger wall logic.
   resolveSlopes() {
-    const slopes = Level.getSlopesNear(this.x, this.y, this.w, this.h);
-    if (!slopes.length) { this.onSlope = false; this.slopeDir = 0; return; }
-
     const footX = this.x + this.w / 2;
-    let best = null, bestTop = Infinity;
-    for (const sl of slopes) {
+    let bestTop = Infinity, bestSlope = 0, bestRamp = null;
+    for (const sl of Level.getSlopesNear(this.x, this.y, this.w, this.h)) {
       if (footX < sl.x || footX > sl.x + sl.w) continue;   // foot column over it
       const top = Level.slopeSurfaceY(sl, footX);
-      if (top < bestTop) { bestTop = top; best = sl; }      // highest surface wins
+      if (top < bestTop) { bestTop = top; bestSlope = -sl.slopeDir; }   // highest surface wins
     }
-    if (!best) { this.onSlope = false; this.slopeDir = 0; return; }
+    const ramp = Level.rampAt(footX);
+    if (ramp) {
+      const top = Level.rampY(ramp, footX);
+      if (top < bestTop) { bestTop = top; bestSlope = Level.rampSlope(ramp, footX); bestRamp = ramp; }
+    }
+    this.ramp = null;
+    if (bestTop === Infinity) { this.onSlope = false; this.surfaceSlope = 0; return; }
 
     const feetY = this.y + this.h;
-    // Clearly rising up through the surface from below → let the jump punch out.
-    if (this.vy < 0 && feetY < bestTop - 1) { this.onSlope = false; this.slopeDir = 0; return; }
+    // Rising, and faster than the surface rises (a jump) → let it punch out.
+    // Measured against the surface's own climb, so riding UP a ramp (vy < 0
+    // but tangent) still counts as riding; rolling onto a downhill never lifts.
+    if (this.vy < Math.min(0, this.vx * bestSlope) - 60 && feetY < bestTop + 1) { this.onSlope = false; this.surfaceSlope = 0; return; }
 
     // Within stick range (a little above the surface, or penetrating) → seat.
     if (feetY >= bestTop - this.slopeSnap) {
+      // Landing on a slope pays out the height lost since leaving the ground, by
+      // the same rule as riding it (vx² += 2·slopeGravity·drop) — like a skater
+      // landing in a transition, jumping into a ramp is never a bail. A hop that
+      // lands where it took off gains nothing, and landing never takes speed away.
+      const drop = bestTop - this.h - this.groundY;
+      if (!this.wasGrounded && drop > 0 && Math.sign(this.vx) === this.travelDir) {
+        const v = Math.sqrt(this.vx * this.vx + 2 * this.slopeGravity * drop);
+        this.vx = this.travelDir * Math.min(v, this.speedLimit);
+      }
       this.y = bestTop - this.h;
-      if (this.vy > 0) this.vy = 0;
+      this.vy = this.vx * bestSlope;        // move along the surface (see update)
       this.grounded = true;
       this.groundMaterial = 'solid';
       this.onSlope = true;
-      this.slopeDir = best.slopeDir;
+      this.surfaceSlope = bestSlope;
+      this.ramp = bestRamp;
     } else {
       this.onSlope = false;
-      this.slopeDir = 0;
+      this.surfaceSlope = 0;
     }
   },
 
