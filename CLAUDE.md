@@ -90,7 +90,7 @@ in a browser to run; deployed live at clowncity.russelldangerr.com (main → Clo
 
 ## Tuning knobs (all in `player.js` constants)
 `runSpeed` (400), `startRampTime` (1.5, level start), `respawnRampTime` (0.4),
-`reverseDecel`/`reverseAccel`, `pauseAtZeroTime`, `treadmillCap` (200), `boostSpeed` (680),
+`reverseDecel` (2400, the turn's brake), `reverseAccel` (1600, speed back after a turn — turning is the core move, so it's cheap; a spin-out's cost re-earns at `cruiseAccel` 420), `pauseAtZeroTime`, `treadmillCap` (200), `boostSpeed` (680),
 `boostAccel` (1600), `brakeWindow` (0.18), `jumpForce` (-480).
 Combat / walls: `attackThreshold` (0.5), `spinAttackCost` (0.45), `wallSlideSpeed` (120),
 `wallJumpForceY` (-440), `wallJumpPushX` (300), `revClimbSpeed` (280).

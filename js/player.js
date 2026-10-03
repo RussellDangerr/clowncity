@@ -34,7 +34,7 @@ const Player = {
   accelRate: 1400,          // px/s^2 — chase target during the start ramp
   cruiseAccel: 420,         // px/s^2 — DELIBERATE eased build to top speed in cruise (~1.2s)
   reverseDecel: 2400,       // px/s^2 — braking old momentum during a turnaround
-  reverseAccel: 1600,       // px/s^2 — accelerating into the new direction
+  reverseAccel: 1600,       // px/s^2 — re-earning speed after a turn (cruise → full in ~0.55s)
   pauseAtZeroTime: 0.03,    // brief commit beat at the bottom of a reversal (tightened)
   zeroEpsilon: 12,          // |vx| under this counts as "stopped"
   treadmillCap: 200,        // 0.5 * runSpeed — speed cap while on a treadmill
@@ -123,7 +123,8 @@ const Player = {
   brakeTimer: 0,          // counts down the wheel-throw window during a brake
   pausedAtZero: 0,        // commit-beat accumulator at the bottom of a reversal
   attackDir: 0,           // wheel-throw direction (= old travelDir); 0 = inactive
-  lipLoaded: false,       // a jump pressed on a kicker, waiting to fire at the lip
+  turnRecover: false,     // just turned: re-earn speed at reverseAccel until back at cruise
+  lipLoaded: false,      // a jump pressed on a kicker, waiting to fire at the lip
   lipGraceTimer: 0,       // counts down after flying off a launcher's lip (a late press still pops)
 
   // ── Wall-slide / wall-jump state ──
@@ -223,6 +224,7 @@ const Player = {
     this.brakeTimer = 0;
     this.pausedAtZero = 0;
     this.attackDir = 0;
+    this.turnRecover = false;
     this.wallSliding = false;
     this.wallStickTimer = 0;
     this.wallJumpLockTimer = 0;
@@ -406,19 +408,24 @@ const Player = {
           this.travelDir = this.desiredDir;
           this.attackDir = 0;
           this.runState = 'cruise';
+          this.turnRecover = true;
         }
       }
     } else {
       // Cruise: build toward top speed along a DELIBERATE eased curve — speed is
-      // something you spin up and feel, not instant. Reversing drops you low so
-      // you re-earn it; attacks and wall rev-climbs spend it.
+      // something you spin up and feel, not instant. Attacks and wall rev-climbs
+      // spend it and you re-earn it slowly. A turn is different: turning is the
+      // core move, so the new direction comes up to speed fast (reverseAccel) —
+      // a turn-then-jump flies ~7 tiles instead of hopping 2.6.
       // Faster than cruise in the air or on a slope, speed belongs to gravity, not
       // the wheel's drive: leave it alone so a drop pays out and a flight carries it.
       const coasting = this.vx * this.travelDir > this.runSpeed && (!this.grounded || this.onSlope || onBoost);
       const targetVx = this.travelDir * this.runSpeed;
       const frac = Math.min(1, Math.abs(this.vx) / this.runSpeed);
-      const accel = this.cruiseAccel * (1 - 0.5 * frac);   // eases as you near the top
+      const base = this.turnRecover ? this.reverseAccel : this.cruiseAccel;
+      const accel = base * (1 - 0.5 * frac);               // eases as you near the top
       if (!coasting) this.vx = approach(this.vx, targetVx, accel * dt);
+      if (this.vx * this.travelDir >= this.runSpeed) this.turnRecover = false;
     }
 
     // Treadmill: cap and damp speed toward 0.5, non-directional (only slows).
@@ -724,6 +731,7 @@ const Player = {
     this.runState = 'cruise';
     this.rampT = 1;
     this.attackDir = 0;
+    this.turnRecover = false;
     this.wallJumpLockTimer = this.wallJumpLockTime;
     this.wallStickTimer = 0;
     this.wallSliding = false;
@@ -999,6 +1007,7 @@ const Player = {
     this.spinAttackTimer = this.spinAttackWindow;
     this._spinCooldown = this.spinAttackCooldown;
     this.vx *= (1 - this.spinAttackCost);
+    this.turnRecover = false;               // the spray's cost is re-earned the slow way
     this.squash = 1.2;
     Camera.shake(2);
     Audio.bounce();
