@@ -58,8 +58,11 @@ in a browser to run; deployed live at clowncity.russelldangerr.com (main → Clo
   **kicker** onto a ledge (free launch makes it; a press takes the high gem) with an
   optional turnaround gem in the alcove under it, ferry, belt-into-kicker combo, wall-jump
   shaft to the goal; beats spaced so overspeed fades to cruise before the next one),
-  **The Catwalk** (harlequin, 112 wide — merged Stage+Workshop; mandatory + optional
-  wall-jump shafts, elevated catwalk over a death-void with a ferry), **The Big Drop**
+  **The Catwalk** (harlequin, 112 wide — the TURN level, every way forward is behind
+  you: a boost-belt room dead-ends, you turn and the belt slings you back up a 5-tile kicker that
+  launches LEFT; a press clears the ledge above, unpressed it drops you back on the floor heading
+  left; a second dead end turns you onto the catwalk over a death-void with a ferry. Either turn
+  works on the ground or as a wall-jump off the dead end), **The Big Drop**
   (midnight, 104 wide — one 16-tile curved ramp: drop / bowl / 45° lip → ~31-tile launch
   over a pit → tent on a high mesa; unpressed the launch peaks ~2 tiles under the mesa,
   a press anywhere on the ramp clears it by 3+ and takes the high gem). Ramps are a map's `ramps`
