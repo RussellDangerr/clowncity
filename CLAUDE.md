@@ -97,7 +97,7 @@ in a browser to run; deployed live at clowncity.russelldangerr.com (main → Clo
 `boostAccel` (1600), `brakeWindow` (0.18), `jumpForce` (-480).
 Combat / walls: `attackThreshold` (0.5), `spinAttackCost` (0.45), `wallSlideSpeed` (120),
 `wallJumpForceY` (-440), `wallJumpPushX` (300), `revClimbSpeed` (280).
-Collision/feel: `stepTolerance` (8, the flat-ground snag guard), `coyoteTime` (0.06),
+Collision/feel: `stepTolerance` (8, the flat-ground snag guard), `coyoteTime` (0.1),
 `Input.bufferTime` (0.1, the jump buffer). Unicycle sway:
 `cruiseLean` (0.10), `brakeLean` (0.14), `leanRate` (10), `wheelRadius` (8).
 Slopes / overspeed (Big Drop): `slopeGravity` (600, height→speed), `overspeedDecay`

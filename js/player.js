@@ -68,7 +68,7 @@ const Player = {
   speedLimit: 1500,         // px/s — tunnelling guard only (<13px/frame for a 14px body); no ramp gets near it
 
   // ── Coyote time / jump buffer ──
-  coyoteTime: 0.06,      // ~7 frames at 120Hz
+  coyoteTime: 0.1,       // 12 frames at 120Hz (0.06 left ~1.3 tiles of grace at belt speed)
   coyoteTimer: 0,
 
   // ── Corner correction ──
