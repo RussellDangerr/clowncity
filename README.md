@@ -9,8 +9,9 @@ Play it live at [clowncity.russelldangerr.com](https://clowncity.russelldangerr.
 
 ## Status
 
-v0.5.0 — three levels (The Big Top, The Catwalk, The Big Drop) with rideable
-slopes, wall-jump climbs, and a big-top finale. Plays on phones held upright
+v0.6.0 — three levels (The Big Top, The Catwalk, The Big Drop) with boost belts,
+curved launch ramps, turnaround puzzles, wall-jump climbs, and a big-top finale.
+Plays on phones held upright
 (on-screen controls) or sideways (swipe and tap), and on desktop.
 
 ## Play
@@ -26,21 +27,24 @@ Open `index.html` in a browser. No build step required.
 | Spray confetti | Press the arrow you're heading | Swipe the way you're heading | Press the arrow you're heading |
 | Pause (restart, levels, sound) | ❚❚ button | ❚❚ corner button | Esc / P |
 
-Reversing is a **weighty** turnaround: Poko decelerates, pauses, then accelerates
-the other way. The braking lunge — the wheel kicking out in the *old* direction —
+Turning is the core move. Reversing is a **snappy** turnaround: Poko brakes,
+then is back to full speed the other way in about half a second, ready to jump.
+The braking lunge — the wheel kicking out in the *old* direction —
 is an attack, and pressing the way you're already heading sprays confetti that
 kills whatever it lands on (it costs speed). You can also **stomp** enemies from
 above. A pit fall, or touching an enemy from the side, is fatal.
 
 ## Features
 
-- Bidirectional auto-runner with weighty unicycle momentum and a start-of-level speed ramp
+- Bidirectional auto-runner with unicycle momentum, snappy turnarounds and a start-of-level speed ramp
 - Phone-first controls: an on-screen deck when held upright, swipe / tap when sideways,
   full keyboard parity, and a tappable pause menu
 - Brake-lunge, confetti-spray and stomp combat
-- Treadmill surfaces that cap speed at 0.5 and bleed momentum
-- Rideable 45° slopes — bomb downhill to bank "overspeed" that powers a bigger jump
-- Wall-slide / wall-jump shafts and an elevated catwalk traverse
+- Height-for-speed physics: drop down a curved ramp to bank "overspeed" that's kept in
+  the air; press on a launch ramp to fire off its lip — no speed caps
+- Boost belts that sling Poko up to 1.7× speed in either direction
+- Turnaround puzzles where the way forward is behind you, wall-jump shafts, and an
+  elevated catwalk traverse
 - Moving + one-way platforms, gaps, and patrol monsters
 - Coyote time + input buffering, squash & stretch, particles, screen shake/flash
 - Centralized design tokens in [`js/tokens.js`](js/tokens.js) — see [`DESIGN-SYSTEM.md`](DESIGN-SYSTEM.md)

@@ -196,11 +196,12 @@ const Game = {
 
     if (Player.dead) return;
 
-    // Checkpoints
+    // Checkpoints: passing the flag's column at ANY height above it counts, so
+    // jumping over one never costs it (respawn is still at the flag).
     for (const cp of Level.checkpoints) {
       if (!cp.active &&
           Player.x + Player.w > cp.x && Player.x < cp.x + cp.w &&
-          Player.y + Player.h > cp.y && Player.y < cp.y + cp.h) {
+          Player.y < cp.y + cp.h) {
         for (const other of Level.checkpoints) other.active = false;
         cp.active = true;
         Player.setCheckpoint(cp.x, cp.y);

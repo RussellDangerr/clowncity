@@ -9,10 +9,10 @@
     Engine.halted = true;
     try {
       Engine.setView(W, H);
-      Level.load(2);                         // The Big Drop: kicker, chasm, tent
+      Level.load(2);                         // The Big Drop: ramp, pit, mesa
       Entities.list.length = 0;
-      Camera.snapTo(26 * 32, 110);           // cols 26–63: kicker → whole tent; sky for the title
-      Player.spawn(34 * 32, 10.5 * 32);      // mid-leap over the chasm, below the title
+      Camera.snapTo(27 * 32, 110);           // cols 27–64: ramp → pit → mesa edge; sky for the title
+      Player.spawn(44 * 32, 11 * 32);        // mid-launch over the pit, below the title
       Object.assign(Player, { respawning: false, vx: 620, vy: -120, lean: 0.06, squash: 1.15 });
       Particles.pool.length = 0;
       Player._carnivalSpray(1);
