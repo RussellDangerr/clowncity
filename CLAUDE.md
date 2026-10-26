@@ -72,8 +72,11 @@ in a browser to run; deployed live at clowncity.russelldangerr.com (main → Clo
   theme, 120 wide, `wrap: true` — a LOOP: no edge walls, Poko's x keeps growing lap after lap and
   every lookup folds through `Level.near(rect)` / wrapped columns. The `D` deck carries Poko at the
   map's `deckSpeed` (160): with the spin 560 px/s, against it 240. Eight `horse` entities ride the
-  deck and bob; three brass rings `r` (deck jump / horse jump / off the booth-roof one-way) unlock
-  the goal, `Level.goalLocked`), **The Duck River** (pond theme, 176 wide, left to right: water `w` is
+  deck and bob low; their backs BOUNCE like ducks. Three brass rings unlock the gate (col 8): A `r`
+  (deck jump), B rides ahead of horse 3 at a fixed height (`ring: true`; a pressed bounce off that
+  horse grabs it), C `r` off the far end of the 32-tile booth roof (a pressed horse bounce gets you
+  up). Lessons from making it fair: hazards ≥ a jump apart (~11.5 tiles at 560), and the bob period
+  must not divide the 9.6s you take to lap a horse (2.4 did: same bob height every meeting, forever)), **The Duck River** (pond theme, 176 wide, left to right: water `w` is
   lethal; `ducks` streams float rubber ducks downstream that BOUNCE Poko (`duckBounce`, a press on
   landing pops to ~297px in the ducks' frame, unpressed ~143). Stream `gaps` are the rhythm and
   never change as ducks drift, so hop distances are independent of the current's speed: 144 =
@@ -137,11 +140,15 @@ Slopes / overspeed (Big Drop): `slopeGravity` (600, height→speed), `overspeedD
 No test framework. Run `index.html` (the preview server on 8081), then in the page:
 - `verify/checks.js` — `runChecks()` regression checks (layout, deck, pause, hints,
   goal, win, meta, warning time, coyote window, respawn wall state, Big Drop ramp
-  launch, all levels in both layouts, the Carousel's speeds/seam/rings/lock, the Duck River's rhythm/crossings/boarding/gallery, the Strongman's grab/drop/grading/lock;
-  the bot plays the Strongman whole).
+  launch, all levels in both layouts, the Carousel's speeds/seam/rings/lock, the Duck River's rhythm/crossings/boarding/gallery, the Strongman's grab/drop/grading/lock,
+  save migration; the bot plays the Strongman whole; `fullRuns` wins the Carousel and Duck River from spawn).
   The bot-driven checks skip maps marked `bot: false` (the bot only jumps pits) — those need their own check. Reload the page first.
 - `verify/play.js` — `playLevel(i, opts)` full-level bot through the real engine with
   touch-equivalent input.
+- `verify/solve.js` — `solveLevel(name, {warp})`: look-ahead playthrough for `bot: false` levels. Before
+  each press it sandboxes the whole game state, only takes jumps with ≥ 0.1s of slack (presses mid-window),
+  turns to wait otherwise; `warp` shifts the moving parts so runs meet them at other moments. Policies
+  per level; the `fullRuns` check runs them. `window.__solve` exposes the sandbox for experiments.
 - `verify/sim.js` — Player-only physics on a scratch map.
 - `verify/og.js` — renders `og.png` (the link preview) from the game's own drawing.
 Harnesses set `Engine.halted` and step `Engine.systems` by hand. **A hidden browser pane

@@ -265,11 +265,12 @@ class PatrolEnemy {
 // ═══════════════════════════════════════════
 // CAROUSEL HORSE
 // Rides the deck round a loop level at Level.deckSpeed, bobbing on its pole.
-// Its back is a one-way top: jump up through it and land on it, and it carries
-// Poko the way the deck does (Player.carry) while lifting him as it rises.
+// Its back is a bouncy one-way top, like a rubber duck: jump up through it,
+// land on it and it squeaks you back up with the deck's carry (a press as you
+// land is a big hop).
 // ═══════════════════════════════════════════
 class CarouselHorse {
-  constructor({ x, y, w, amp, period, phase, floorY }) {
+  constructor({ x, y, w, amp, period, phase, floorY, ring }) {
     this.x = x;
     this.lowY = y;              // its back at the bottom of the bob
     this.w = w || 80; this.h = 8;
@@ -277,9 +278,27 @@ class CarouselHorse {
     this.period = period || 2.4;
     this.phase = phase || 0;
     this.floorY = floorY ?? y + 64;   // where the pole meets the deck
+    this.ringAhead = 150;       // px ahead of its middle: where a pressed bounce peaks
+    this.ringRise = 187;        // px from the bottom of the bob up to the catch area's top
     this.t = 0;
     this.y = this._bobY();
     this.prevY = this.y;
+    // A brass ring hung from the canopy just ahead of this horse: it turns with
+    // the horse but hangs at a fixed height (bobbing with it put it out of reach
+    // whenever the horse moved during the hop). Its catch area is big, so a
+    // pressed bounce from any height of the bob and anywhere on its back passes
+    // through it; a deck jump tops out below it.
+    if (ring) {
+      this.ring = { x: 0, y: 0, w: 48, h: 80, collected: false };
+      Level.rings.push(this.ring);
+      this._placeRing();
+    }
+  }
+
+  _placeRing() {
+    const W = Level.levelWidth, dir = Math.sign(Level.deckSpeed) || 1;
+    this.ring.x = ((this.x + this.w / 2 - this.ring.w / 2 + dir * this.ringAhead) % W + W) % W;
+    this.ring.y = this.lowY - this.ringRise;
   }
 
   _bobY() {
@@ -293,12 +312,14 @@ class CarouselHorse {
     // Round the loop, kept in map space (Level.near finds the copy beside Poko).
     const W = Level.levelWidth;
     this.x = (((this.x + Level.deckSpeed * dt) % W) + W) % W;
+    if (this.ring) this._placeRing();
   }
 
   getSolidRect() {
     return {
       x: this.x, y: this.y, w: this.w, h: this.h,
       oneWay: true,
+      bounce: true,
       dy: this.y - this.prevY,
       carry: Level.deckSpeed,
     };
@@ -313,6 +334,14 @@ class CarouselHorse {
     ctx.strokeStyle = Tokens.color.brass;
     ctx.lineWidth = 3;
     ctx.beginPath(); ctx.moveTo(cx, Camera.y); ctx.lineTo(cx, this.floorY); ctx.stroke();
+    // Ring B's arm: from this horse's pole out to the ring's string, so it reads as this horse's ring.
+    if (this.ring && !this.ring.collected) {
+      const rx = this.ring.x + this.ring.w / 2, armY = this.ring.y + this.ring.h / 2 - 34;
+      if (Math.abs(rx - cx) < 400) {
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(cx, armY); ctx.lineTo(rx, armY); ctx.stroke();
+      }
+    }
     // Legs, tucked and stretched with the bob.
     ctx.strokeStyle = body;
     ctx.lineWidth = 4;

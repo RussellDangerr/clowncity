@@ -14,6 +14,7 @@ const Game = {
   transitionCallback: null,
   totalDeaths: 0,
   totalGems: 0,
+  objectiveTimer: 0,       // the level's goal line shows while > 0 (start of level, or bumping a lock)
 
   // Save data, one record per level NAME, so levels can be added, merged and
   // reordered without scrambling anyone's progress. A level you've retired
@@ -140,6 +141,7 @@ const Game = {
     Player.spawn(Level.spawnX, Level.spawnY);
     Player.deathCount = 0;
     this.levelTimer = 0;
+    this.objectiveTimer = Level.maps[index].objective ? 6 : 0;
     Camera.snapToPlayer();
     // Store total collectibles for save data
     this.levelRecord(index).totalGems = Level.totalCollectibles;
@@ -314,6 +316,14 @@ const Game = {
         this.timer = 0;
         return;
       }
+    }
+
+    // Ran into a lock (the shut gate, the raised drawbridge): say again what opens it.
+    if (this.objectiveTimer > 0) this.objectiveTimer -= dt;
+    const touch = { x: Player.x - 2, y: Player.y, w: Player.w + 4, h: Player.h };
+    if ((Level.goalLocked && Level.getGoals().some(g => aabb(touch, Level.near(g)))) ||
+        (Level.bridgeSpan.length && !Level.bridgeOpen && Level.tiles.some(t => t.bridge && aabb(touch, t)))) {
+      this.objectiveTimer = Math.max(this.objectiveTimer, 2.5);
     }
 
     // Pit death
@@ -619,6 +629,26 @@ const Game = {
       ctx.fillStyle = Tokens.rgba(Tokens.color.dust, alpha * 0.5);
       ctx.font = Tokens.font.xs;
       ctx.fillText(`${this.currentLevel + 1} / ${this.totalLevels}`, Engine.width / 2, 52);
+      ctx.textAlign = 'left';
+    }
+
+    // The level's goal (and how to do the new move), under the name.
+    const objective = Level.maps[this.currentLevel].objective;
+    if (objective && this.objectiveTimer > 0) {
+      const a = Math.min(1, this.objectiveTimer);
+      ctx.textAlign = 'center';
+      ctx.font = Tokens.font.md;
+      const w = ctx.measureText(objective[0]).width + 32;
+      ctx.globalAlpha = a * 0.85;
+      this._panel(ctx, Engine.width / 2 - w / 2, 60, w, objective[1] ? 46 : 28);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = Tokens.rgba(Tokens.color.gold, a);
+      ctx.fillText(objective[0], Engine.width / 2, 79);
+      if (objective[1]) {
+        ctx.font = Tokens.font.xs;
+        ctx.fillStyle = Tokens.rgba(Tokens.color.dust, a * 0.8);
+        ctx.fillText(Layout.hint(objective[1]), Engine.width / 2, 97);
+      }
       ctx.textAlign = 'left';
     }
 

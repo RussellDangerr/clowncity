@@ -506,61 +506,93 @@
       assert(airborne === 0, `left the deck for ${airborne} frames at the seam`);
       assert(maxCam < 10, `camera jumped ${maxCam.toFixed(1)} px in a frame at the seam`);
 
-      // Put Poko on horse `h` at the top of its bob, its left edge at x.
-      const horseAtPeak = (h, x) => {
-        h.x = x; h.t = (((Math.PI - h.phase) / (2 * Math.PI)) * h.period % h.period + h.period) % h.period;
+      // Put horse h with its left edge at x, at bob phase θ (0 = lowest, π = top),
+      // and drop Poko onto its back from just above.
+      const horseAt = (h, x, theta) => {
+        h.x = x; h.t = (((theta - h.phase) / (2 * Math.PI)) * h.period % h.period + h.period) % h.period;
         h.y = h._bobY(); h.prevY = h.y;
       };
-      const onHorse = (h) => {
-        Player.spawn(h.x + 4, h.y - Player.h, 0.01); Player.respawning = false;
-        Object.assign(Player, { vx: run, runState: 'cruise', rampT: 1, grounded: true, carry: S, surfaceSpeed: S });
+      const dropOn = (h) => {
+        Player.spawn(h.x + 4, h.y - Player.h - 4, 0.01); Player.respawning = false;
+        Object.assign(Player, { vx: run, runState: 'cruise', rampT: 1, vy: 60, carry: S });
       };
       const horse = () => Entities.list.find(e => e instanceof CarouselHorse);
+      // Step until Poko bounces (grounded and going up); optionally press right then.
+      const bounce = (press) => {
+        for (let f = 0; f < 60; f++) {
+          step(Engine.fixedDt);
+          if (Player.grounded && Player.vy < 0) { if (press) Input.tapKey('Space'); return true; }
+        }
+        return false;
+      };
 
-      // 3) A horse seats Poko and carries him.
+      // 3) A horse bounces Poko and hands him the deck's carry.
       fresh(); step(0.1);
-      const h = horse(); horseAtPeak(h, 50 * T); onHorse(h);
-      step(Engine.fixedDt * 4);
-      assert(Player.grounded && Player.surfaceSpeed === S && Math.abs(Player.y + Player.h - h.y) < 1,
-        `not seated on the horse (grounded ${Player.grounded}, feet ${(Player.y + Player.h).toFixed(1)} vs ${h.y.toFixed(1)})`);
+      const h = horse(); horseAt(h, 50 * T, Math.PI); dropOn(h);
+      assert(bounce(false), 'landing on a horse should bounce');
+      assert(Player.carry === S && Player.vy <= -Player.duckBounce + 30, `horse bounce: vy ${Player.vy.toFixed(0)}, carry ${Player.carry}`);
 
-      // Sweep takeoff points; true if any jump from `setup` grabs ring `ri` (A=0, B=1, C=2).
-      const tries = (setup, xs, ri) => xs.some(x => {
+      // Sweep takeoff points; true if any try from `setup` grabs `ring`.
+      const tries = (setup, xs, ring) => xs.some(x => {
         setup(x);
-        Input.tapKey('Space');
         for (let f = 0; f < 150 && !Player.dead; f++) step(Engine.fixedDt);
-        return Level.rings.slice().sort((a, b) => a.x - b.x)[ri].collected;
+        return ring.collected;
       });
       const xsNear = (col, from, to) => { const a = []; for (let d = from; d <= to; d += 6) a.push(col * T + d); return a; };
-      const fromDeck = (x) => {                 // cruising on the deck, at x, with the spin
+      const fromDeck = (x) => {                 // cruising on the deck with the spin, jump at x
         deckAt(Math.floor(x / T) - 8); step(0.6);
         for (let f = 0; Player.x < x && f < 1200; f++) step(Engine.fixedDt);
+        Input.tapKey('Space');
       };
-      const fromHorse = (x) => { fresh(); step(0.05); const h = horse(); horseAtPeak(h, x); onHorse(h); };
-      const fromRoof = (x) => {                 // rolling along the booth roof
-        fresh(); Player.spawn(88 * T, 16 * T - Player.h, 0.01); Player.respawning = false;
+      const fromHorse = (theta, press) => (x) => { fresh(); step(0.05); const h = horse(); horseAt(h, x, theta); dropOn(h); bounce(press); };
+      const fromRoof = (x) => {                 // rolling along the booth roof, jump at x
+        fresh(); Player.spawn(96 * T, 17 * T - Player.h, 0.01); Player.respawning = false;
         Object.assign(Player, { vx: run, runState: 'cruise', rampT: 1 });
         step(Engine.fixedDt * 2);
         for (let f = 0; Player.x < x && f < 1200; f++) step(Engine.fixedDt);
+        Input.tapKey('Space');
       };
-      const cols = Level.rings.map(r => r.x / T).sort((a, b) => a - b);
-      assert(tries(fromDeck, xsNear(cols[0], -320, 0), 0), 'ring A: no deck jump reaches it');
-      assert(!tries(fromDeck, xsNear(cols[1], -320, 0), 1), 'ring B: a deck jump reaches it (it should need a horse)');
-      assert(tries(fromHorse, xsNear(cols[1], -320, 0), 1), 'ring B: no jump from a horse at its peak reaches it');
-      assert(!tries(fromHorse, xsNear(cols[2], -320, 0), 2), 'ring C: a horse jump reaches it (it should need the booth roof)');
-      assert(tries(fromRoof, xsNear(cols[2], -300, -80), 2), 'ring C: no jump off the booth roof reaches it');
+      const ringA = () => Level.rings.find(r => r.x === 20 * T);
+      const ringC = () => Level.rings.find(r => r.x === 110 * T);
+      const rider = () => Entities.list.find(e => e.ring);
+      assert(tries(fromDeck, xsNear(20, -320, 0), { get collected() { return ringA().collected; } }), 'ring A: no deck jump reaches it');
 
-      // 4) A horse near its peak reaches the booth roof.
-      const roofY = 16 * T;
-      const landsOnRoof = xsNear(88, -360, 0).some(x => {
-        fromHorse(x); Input.tapKey('Space');
+      // Ring B rides horse 3. A pressed bounce off its back grabs it from any
+      // height of the bob and anywhere on the back; a deck jump tops out under it.
+      let ringBMisses = [];
+      for (const theta of [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2]) {
+        for (const at of [-10, 20, 44, 64]) {    // back edge to front edge (he rolls 400px/s while he drops)
+          fresh(); step(0.05);
+          const h = rider(); horseAt(h, 50 * T, theta); h._placeRing();
+          Player.spawn(h.x + at, h.y - Player.h - 1, 0.01); Player.respawning = false;   // 1px up: a longer drop rolls him off the front
+          Object.assign(Player, { vx: run, runState: 'cruise', rampT: 1, vy: 60, carry: S });
+          bounce(true);
+          for (let f = 0; f < 120 && !h.ring.collected; f++) step(Engine.fixedDt);
+          if (!h.ring.collected) ringBMisses.push(`θ ${theta.toFixed(2)} at ${at}`);
+        }
+      }
+      assert(!ringBMisses.length, `ring B: pressed bounces off its horse missed it (${ringBMisses.join(', ')})`);
+      deckAt(40); step(0.6);
+      let deckTop = Infinity;
+      Input.tapKey('Space');
+      for (let f = 0; f < 90; f++) { step(Engine.fixedDt); deckTop = Math.min(deckTop, Player.y); }
+      const rb = rider().ring;
+      assert(deckTop > rb.y + rb.h - 4, `ring B: a deck jump reaches its catch area (top ${deckTop.toFixed(0)} vs ${rb.y + rb.h - 4})`);
+
+      assert(!tries(fromHorse(Math.PI, true), xsNear(110, -320, 0), { get collected() { return ringC().collected; } }), 'ring C: a horse bounce reaches it (it should need the booth roof)');
+      assert(tries(fromRoof, xsNear(110, -360, -60), { get collected() { return ringC().collected; } }), 'ring C: no jump off the booth roof reaches it');
+
+      // 4) A pressed bounce off a horse mid-bob lands on the booth roof.
+      const roofY = 17 * T;
+      const landsOnRoof = xsNear(88, -400, 0).some(x => {
+        fromHorse(Math.PI / 2, true)(x);
         for (let f = 0; f < 120; f++) {
           step(Engine.fixedDt);
           if (Player.grounded && Math.abs(Player.y + Player.h - roofY) < 1) return true;
         }
         return false;
       });
-      assert(landsOnRoof, 'no jump from a horse at its peak lands on the booth roof');
+      assert(landsOnRoof, 'no pressed bounce off a horse mid-bob lands on the booth roof');
 
       // 5) The exit is shut until all three rings are in.
       const goal = Level.getGoals()[0];
@@ -577,7 +609,7 @@
       for (const r of Level.rings) r.collected = true;
       Level.ringsCollected = Level.rings.length;
       assert(throughGoal(), 'the exit stayed shut with every ring in');
-      return `with spin ${withSpin.toFixed(0)}, against ${against.toFixed(0)} px/s; seam smooth (cam ≤${maxCam.toFixed(1)}px/frame); rings A/B/C need deck/horse/roof; exit locks`;
+      return `with spin ${withSpin.toFixed(0)}, against ${against.toFixed(0)} px/s; seam smooth (cam ≤${maxCam.toFixed(1)}px/frame); ring A from the deck, B off its horse at any bob height, C off the roof; exit locks`;
     },
     // The Duck River: water kills; a rubber duck bounces Poko and hands him the
     // current; the stream's spacing is the rhythm (small gaps chain with no
@@ -811,11 +843,29 @@
       assert(Game.save.levels['The Big Top'].complete === false && Game.save.levels['The Big Top'].bestDeaths === -1, 'bad fields in a record should fall back to defaults');
       return 'old position arrays → names (Big Top 2 deaths/7 gems, Catwalk, Big Drop), rewritten as v2; beaten levels never relock; junk loads empty';
     },
+    // Winnable from the spawn point, the way a careful player plays (verify/
+    // solve.js: looks ahead before each press, only takes jumps with ≥ 0.1s
+    // of slack, turns to wait otherwise). Each level is run at several
+    // timings of its moving parts, so no win depends on luck.
+    async fullRuns() {
+      const out = [];
+      for (const name of ['The Carousel', 'The Duck River']) {
+        const times = [];
+        for (const warp of [0, 1.2, 2.4, 3.6]) {
+          const r = solveLevel(name, { warp, maxSeconds: 75 });
+          assert(r.result === 'goal', `${name} (warp ${warp}): ${r.result} after ${r.time}s, rings ${r.rings}, targets ${r.targets}`);
+          times.push(`${r.time}s${r.deaths.length ? `/${r.deaths.length}✝` : ''}`);
+        }
+        out.push(`${name}: ${times.join(' ')}`);
+      }
+      return out.join(' · ');
+    },
     // ── checks added by later tasks go here, in task order ──
   };
 
   window.runChecks = async function (names) {
     if (!window.playLevel) await fetch('/verify/play.js').then(r => r.text()).then(eval);
+    if (!window.solveLevel) await fetch('/verify/solve.js').then(r => r.text()).then(eval);
     // splashHandoff needs the untouched splash, so it always runs first.
     const list = (names || Object.keys(CHECKS)).slice()
       .sort((a, b) => (b === 'splashHandoff') - (a === 'splashHandoff'));

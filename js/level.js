@@ -252,24 +252,38 @@ const Level = {
       spawn: [3, 21],
       wrap: true,                    // a loop: no edge walls, the far end runs into the start
       bot: false,                    // the pit-jumping bot can't chase rings: see the carousel check
+      objective: ['Grab the 3 brass rings to open the gate', 'bigHop'],   // [goal, Layout hint key]
       deckSpeed: 160,                // px/s the deck carries Poko (+ = the way he starts)
       entities: [
-        // Eight horses ride the deck around the loop, bobbing out of step.
+        // Eight horses ride the deck around the loop, bobbing out of step. Their
+        // backs bounce like the rubber ducks (a press on landing = a big hop), and
+        // they bob low enough (back 1-3 tiles over the deck) that a jump from the
+        // deck lands on one most of the time.
         ...Array.from({ length: 8 }, (_, i) => ({
-          type: 'horse', x: i * 15 * 32 + 5 * 32, y: 20 * 32, w: 80, amp: 80, period: 2.4, phase: i * Math.PI / 2, floorY: 22 * 32,
+          // period: you overtake a given horse every 9.6s (loop / the 400 px/s you
+          // gain on it). A bob that divides that (2.4s did, exactly 4x) meets you
+          // at the same height every lap forever; 2.25s drifts ~1/4 bob per lap.
+          type: 'horse', x: i * 15 * 32 + 5 * 32, y: 21 * 32, w: 80, amp: 72, period: 2.25, phase: i * Math.PI / 2, floorY: 22 * 32,
+          ring: i === 3,             // brass ring B rides just ahead of this one
         })),
-        // Patrols on the deck (they walk on the deck's boards; the spin doesn't move them).
-        { type: 'patrol', x: 44 * 32, y: 22 * 32 - 20, range: 64, speed: 55 },
-        { type: 'patrol', x: 104 * 32, y: 22 * 32 - 20, range: 64, speed: 55 },
-        // The ticket booth's roof: only a horse near the top of its bob reaches it.
-        { type: 'oneway', x: 88 * 32, y: 16 * 32, w: 7 * 32 },
+        // One patrol on the deck (it walks the boards; the spin doesn't move it),
+        // mid-way between the gaps: a jump covers ~11.5 tiles with the spin, so
+        // hazards closer than that leave no room to land and react.
+        { type: 'patrol', x: 50 * 32, y: 22 * 32 - 20, range: 64, speed: 55 },
+        // The ticket booth's roof, 32 tiles: you overtake a horse about every 21
+        // tiles, so every lap gives a chance or two to bounce up onto it, with
+        // room left to run up to ring C.
+        { type: 'oneway', x: 78 * 32, y: 17 * 32, w: 32 * 32 },
       ],
       // 120 wide x 25 tall, and it wraps. The deck spins the way Poko starts, so
       // riding with it is fast (cruise + deckSpeed) and turning back is a grind.
-      // Three brass rings, each a step higher, unlock the exit gate (col 112):
+      // Three brass rings, each a step higher, unlock the exit gate (col 8, the
+      // first thing you see):
       //   A (col 20)  low: a jump from the deck.
-      //   B (col 58)  a jump from any horse but the lowest of its bob.
-      //   C (col 98)  off the booth roof, which a horse near its peak reaches.
+      //   B           rides ahead of horse 3 (bobbing with it): board that horse
+      //               and press as you land. The deck can't reach it.
+      //   C (col 110) off the far end of the booth roof (row 17, cols 78-109),
+      //               which a pressed horse bounce lands on.
       // Gaps at cols 30-33 (a hop either way) and 70-77 (a jump only clears it
       // riding with the spin). Miss a ring: go round again, or turn back for it.
       data: [
@@ -285,16 +299,16 @@ const Level = {
         '000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
         '000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
         '000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
-        '00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000r000000000000000000000',
         '000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
+        '00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000r000000000',
         '000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
-        '0000000000000000000000000000000000000000000000000000000000r00000000000000000000000000000000o0000000000000000000000000000',
+        '0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000o0000000000000000000000000000',
         '000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
         '000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
         '00000000000000000000r000000000000000000000000000000000000000000000000000000o00000000000000000000000000000000000000000000',
         '0000000000000000000000000000000oo000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
         '000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
-        '0000000000o00000000000000000000000000000c000000000o00000000000000o0000000000000000c00000000000000000000000o00000g000o000',
+        '00000000g0o00000000000000000000000000000c000000000o00000000000000o0000000000000000c00000000000000000000000o000000000o000',
         'DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD0000DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD00000000DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD',
         '111111111111111111111111111111000011111111111111111111111111111111111100000000111111111111111111111111111111111111111111',
         '111111111111111111111111111111000011111111111111111111111111111111111100000000111111111111111111111111111111111111111111',
@@ -305,14 +319,17 @@ const Level = {
       theme: 'pond',
       spawn: [3, 21],
       bot: false,                    // the pit-jumping bot can't read duck rhythm or aim: see the duckRiver check
+      objective: ['Knock down the tin ducks to drop the drawbridge', 'spray'],
       entities: [
         // Rubber ducks float downstream (+x) at the current's speed. `gaps` is the
         // spacing between ducks, which never changes as they drift: an unpressed
         // squeak hop carries Poko ~143 px over a duck, one pressed as he lands ~297
         // (a late press ~264: the 64px ducks absorb it).
-        { type: 'ducks', x0: 14 * 32, x1: 26 * 32, y: 22 * 32 - 2, speed: 120, gaps: [192] },
+        // The creek is the lesson: ducks nearly nose to tail, so almost any jump
+        // lands on one and the plain hops chain across.
+        { type: 'ducks', x0: 14 * 32, x1: 26 * 32, y: 22 * 32 - 2, speed: 120, gaps: [128] },
         { type: 'ducks', x0: 42 * 32, x1: 74 * 32, y: 22 * 32 - 2, speed: 120, gaps: [144, 144, 296] },
-        { type: 'ducks', x0: 80 * 32, x1: 112 * 32, y: 22 * 32 - 2, speed: 120, gaps: [144, 296] },
+        { type: 'ducks', x0: 84 * 32, x1: 112 * 32, y: 22 * 32 - 2, speed: 120, gaps: [144, 296] },
         { type: 'patrol', x: 34 * 32, y: 22 * 32 - 20, range: 64, speed: 55 },
         // The shooting gallery: five tin ducks on a rail over the pen. Knock them
         // all down (spray / lunge) and the drawbridge drops.
@@ -323,8 +340,8 @@ const Level = {
       ],
       // 176 wide x 25 tall, flowing left to right. Water (w) is lethal; the ducks
       // in it bounce. Bank -> creek (cols 14-25, one duck hop) -> bank, patrol ->
-      // river (cols 42-73): hop, hop, BIG -> island checkpoint (74-79) -> river
-      // (80-111): hop, BIG, faster -> the gallery pen (cols 119-136) between a
+      // river (cols 42-73): hop, hop, BIG -> island checkpoint (74-83: room to turn
+      // and come back if the gap is wrong) -> river (84-111): hop, BIG, faster -> the gallery pen (cols 119-136) between a
       // 2-tall counter (col 118) and the raised drawbridge (u, col 137): turn back
       // and forth spraying the tin ducks -> the bridge lowers (n, row 22, cols
       // 138-157) over the lock -> goal (col 171).
@@ -351,15 +368,16 @@ const Level = {
         '10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000u00000000000000000000000000000000000001',
         '10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000000000000000000u00000000000000000000000000000000000001',
         '1000000000000000000000000000c0o000000000000000000000000000000000000000000000co000000000000000000000000000000000000c00010000000o0000000000u000000000o000000000000c00000o0000g0001',
-        '11111111111111wwwwwwwwwwww1111111111111111wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww111111wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww11111111111111111111111111nnnnnnnnnnnnnnnnnnnn111111111111111111',
-        '11111111111111wwwwwwwwwwww1111111111111111wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww111111wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww11111111111111111111111111wwwwwwwwwwwwwwwwwwww111111111111111111',
-        '11111111111111wwwwwwwwwwww1111111111111111wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww111111wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww11111111111111111111111111wwwwwwwwwwwwwwwwwwww111111111111111111',
+        '11111111111111wwwwwwwwwwww1111111111111111wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww1111111111wwwwwwwwwwwwwwwwwwwwwwwwwwww11111111111111111111111111nnnnnnnnnnnnnnnnnnnn111111111111111111',
+        '11111111111111wwwwwwwwwwww1111111111111111wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww1111111111wwwwwwwwwwwwwwwwwwwwwwwwwwww11111111111111111111111111wwwwwwwwwwwwwwwwwwww111111111111111111',
+        '11111111111111wwwwwwwwwwww1111111111111111wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww1111111111wwwwwwwwwwwwwwwwwwwwwwwwwwww11111111111111111111111111wwwwwwwwwwwwwwwwwwww111111111111111111',
       ]
     },
     {
       name: 'The Strongman',
       theme: 'strongman',
       spawn: [3, 41],
+      objective: ['Climb the tower, grab the hammer, ring the bell!'],
       entities: [
         { type: 'patrol', x: 4 * 32, y: 32 * 32 - 20, range: 64, speed: 55 },   // F1, past its gap
         { type: 'patrol', x: 8 * 32, y: 12 * 32 - 20, range: 64, speed: 55 },   // F3: the shaft-3 exit lands too close for a gap
