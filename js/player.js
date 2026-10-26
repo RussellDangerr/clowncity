@@ -44,6 +44,8 @@ const Player = {
   respawnRampTime: 0.4,     // s — standstill → cruise after a respawn (startRampTime is the level start)
   deckGrip: 1200,           // px/s^2 — how fast Poko's carry matches a moving surface (deck → full carry in ~0.13s)
   duckBounce: 260,          // px/s — a rubber duck squeaks Poko back up (a press as he lands adds rampJumpPop: 540)
+  trampReturn: 0.9,         // a trampoline gives back this much of the height he fell (enough to make the ledge he missed)
+  trampPump: 1.25,          // ...and this much if he presses as he lands: he can pump higher than he started
   brakeWindow: 0.18,        // max lifetime of the wheel-throw attack hitbox
 
   // ── Spin-out attack (tap your CURRENT direction with momentum) ──
@@ -179,6 +181,7 @@ const Player = {
   checkpointY: 0,
   finished: false,          // reached the goal: coasting to a stop, input ignored
   hauling: false,           // holding the Strongman's hammer: wheel locked, input ignored, drops straight down
+  trampDrop: 0,             // height of the fall a trampoline just answered (this frame only): a press pumps it
   airTop: 0,                // highest point (min y) since last on the ground: a landing's drop height is y − airTop
   hidden: false,            // swallowed by the tent (Big Drop finale): not drawn or updated
 
@@ -741,8 +744,11 @@ const Player = {
       const lateBy = this.lipGrace - this.lipGraceTimer;
       vy = -Math.sqrt(vy * vy + 2 * this.gravityUp * this.rampJumpPop * lateBy);
     }
+    // Pressed as a trampoline bounces him: pump it to trampPump of the fall.
+    if (this.trampDrop > 0) vy = Math.min(vy, -Math.sqrt(2 * this.gravityUp * this.trampPump * this.trampDrop));
     this.vy = this.vy < 0 ? Math.min(jump, vy) : jump;
     this.lipGraceTimer = 0;
+    this.trampDrop = 0;
     if (overFrac > 0.4) {
       this.squash = 1.5;
       Camera.shake(3 + Math.min(1, overFrac) * 4);
@@ -820,6 +826,7 @@ const Player = {
     this.wallDir = 0;
     this.groundMaterial = 'solid';
     this.surfaceSpeed = 0;
+    this.trampDrop = 0;
 
     const tiles = Level.getTilesNear(this.x, this.y, this.w, this.h);
 
@@ -989,6 +996,14 @@ const Player = {
           // Grounded stays true, so a jump pressed as he lands (buffer) or just
           // after (coyote) pops on top of the bounce (see _doGroundJump).
           this.vy = -this.duckBounce;
+          if (rect.elastic) {
+            // A trampoline gives back the HEIGHT he fell (from the top of his arc,
+            // never his speed, which caps at 720): trampReturn of it, or trampPump
+            // with a press as he lands (_doGroundJump). A bigger fall, a bigger bounce.
+            const drop = Math.max(0, rect.y - this.h - this.airTop);
+            this.vy = -Math.max(this.duckBounce, Math.sqrt(2 * this.gravityUp * this.trampReturn * drop));
+            this.trampDrop = drop;
+          }
           this.carry = this.surfaceSpeed;
           this.squash = 0.7;
           Audio.bounce();

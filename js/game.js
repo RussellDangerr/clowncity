@@ -279,8 +279,11 @@ const Game = {
     // Goal (shut until the rings are in)
     const goals = Level.goalLocked ? [] : Level.getGoals().map(g => Level.near(g));
     for (const g of goals) {
+      // The tent swallows Poko if he passes over its mouth at any height (like a
+      // checkpoint): an overshooting launch must never strand him past it.
+      const tent = Level.maps[this.currentLevel].tent;
       if (Player.x + Player.w > g.x && Player.x < g.x + g.w &&
-          Player.y + Player.h > g.y && Player.y < g.y + g.h) {
+          (tent ? Player.y < g.y + g.h : Player.y + Player.h > g.y && Player.y < g.y + g.h)) {
         Particles.burst(g.x + g.w / 2, g.y + g.h / 2, 30, 200, Tokens.rgba(Tokens.color.gold, 0.7), 0.5);
         Camera.shake(8);
         Engine.flash('white', 0.5);

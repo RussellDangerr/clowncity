@@ -25,6 +25,8 @@ const Entities = {
         this.list.push(new TinDuck(def));
       } else if (def.type === 'strongman') {
         this.list.push(new Strongman(def));
+      } else if (def.type === 'trampoline') {
+        this.list.push(new Trampoline(def));
       }
     }
   },
@@ -162,9 +164,11 @@ class MovingPlatform {
 // Player passes through from below, lands on top.
 // ═══════════════════════════════════════════
 class OneWayPlatform {
-  constructor({ x, y, w }) {
+  constructor({ x, y, w, wire, carry }) {
     this.x = x; this.y = y;
     this.w = w || 64; this.h = 8;
+    this.wire = !!wire;         // drawn as a high wire between two poles
+    this.carry = carry || 0;    // a zip line: carries a rider along like the carousel deck (Player.carry)
   }
 
   update(dt) {}
@@ -172,12 +176,23 @@ class OneWayPlatform {
   getSolidRect() {
     return {
       x: this.x, y: this.y, w: this.w, h: this.h,
-      oneWay: true
+      oneWay: true, carry: this.carry,
     };
   }
 
   draw(ctx) {
     const theme = Level.getTheme();
+    if (this.wire) {
+      // A high wire: a taut rope between two striped poles.
+      ctx.fillStyle = Tokens.color.brass;
+      ctx.fillRect(this.x - 4, this.y, 4, 120);
+      ctx.fillRect(this.x + this.w, this.y, 4, 120);
+      ctx.strokeStyle = Tokens.color.tentCream;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(this.x, this.y + 1); ctx.lineTo(this.x + this.w, this.y + 1); ctx.stroke();
+      ctx.lineWidth = 1;
+      return;
+    }
     // Dashed/thin platform to visually signal one-way
     ctx.fillStyle = theme.tile[2];
     for (let dx = 0; dx < this.w; dx += 8) {
@@ -538,12 +553,16 @@ class TinDuck {
 //   flight   the puck rises, rings the bell if it reaches it (that opens the
 //            goal), falls back and settles on the lever
 //   return   the camera comes home, then Poko lets go and rolls on. No ring:
-//            the hammer goes back on its hook for another climb.
+//            the hammer goes back on its hook and Poko back to his last
+//            checkpoint (the top of the tower), for another go.
+// The grade is the skill: rolling off the top edge drops ~1216px and the puck
+// stops just short of the bell; JUMPING off for the hammer adds the jump's
+// height (~1304px) and rings it.
 // ═══════════════════════════════════════════
 class Strongman {
   constructor({ hammerX, hammerY, grab, plateX0, plateX1, groundY, trackX, bellY }) {
     Object.assign(this, { hammerX, hammerY, grab, plateX0, plateX1, groundY, trackX, bellY });
-    this.gain = 1.25;            // puck launch height per px of drop (from the tower top it rings with room to spare)
+    this.gain = 0.96;            // puck launch height per px of drop: a roll-off peaks ~40px under the bell, a jump-off rings it with ~45px spare
     this.puckGravity = 600;      // px/s^2 — floaty, so the camera can ride along
     this.state = 'hanging';
     this.t = 0;
@@ -664,6 +683,11 @@ class Strongman {
     this.state = Level.bellRung ? 'done' : 'hanging';
     if (!Player.hauling) return;
     Player.hauling = false;
+    if (!Level.bellRung) {               // too weak: back up to the last checkpoint for another go
+      Player.respawn();
+      Camera.snapToPlayer();
+      return;
+    }
     Player.vx = 0;
     Player.runState = 'ramp';
     Player.rampT = 0;
@@ -750,5 +774,47 @@ class Strongman {
       this._drawHammer(ctx, this.dropX, this.groundY - 15, this.topple);
     }
     ctx.textAlign = 'left';
+  }
+}
+
+// ═══════════════════════════════════════════
+// TRAMPOLINE
+// A one-way bounce pad that gives back the height Poko fell (Player.trampReturn
+// of it, or trampPump with a press as he lands). In a pit it's a safety net
+// that bounces him back up to the ledge he missed; pumped, it can launch him
+// far higher than he started.
+// ═══════════════════════════════════════════
+class Trampoline {
+  constructor({ x, y, w }) {
+    this.x = x; this.y = y;
+    this.w = w || 96; this.h = 8;
+    this.sag = 0;               // the bed dips when he lands and springs back
+  }
+
+  update(dt) {
+    if (Player.trampDrop > 0 && Player.x + Player.w > this.x && Player.x < this.x + this.w &&
+        Math.abs(Player.y + Player.h - this.y) < 2) this.sag = 1;
+    this.sag = Math.max(0, this.sag - dt * 5);
+  }
+
+  getSolidRect() {
+    return { x: this.x, y: this.y, w: this.w, h: this.h, oneWay: true, bounce: true, elastic: true, carry: 0 };
+  }
+
+  draw(ctx) {
+    const dip = Math.sin(this.sag * Math.PI) * 6;
+    // Legs every few tiles down to the floor beneath.
+    ctx.fillStyle = Tokens.color.plank[1];
+    for (let lx = this.x + 6; lx < this.x + this.w - 4; lx += 64) ctx.fillRect(lx, this.y + 4, 4, 24);
+    ctx.fillRect(this.x + this.w - 10, this.y + 4, 4, 24);
+    // Striped bed (red / cream), dipping in the middle when he lands.
+    for (let bx = 0; bx < this.w; bx += 16) {
+      const mid = 1 - Math.abs((bx + 8) / this.w * 2 - 1);
+      ctx.fillStyle = (bx / 16) & 1 ? Tokens.color.tentCream : Tokens.color.tentRed;
+      ctx.fillRect(this.x + bx, this.y + dip * mid, Math.min(16, this.w - bx), 6);
+    }
+    ctx.fillStyle = Tokens.color.brass;
+    ctx.fillRect(this.x - 2, this.y - 1, 4, 8);
+    ctx.fillRect(this.x + this.w - 2, this.y - 1, 4, 8);
   }
 }

@@ -27,6 +27,8 @@ const Layout = {
       continue: 'SPACE',
       spray: 'press your heading to spray',
       bigHop: 'press SPACE as you land for a big hop',
+      bigJump: 'jump off the top: the higher, the harder you hit',
+      tramp: 'press SPACE as you land on a trampoline to pump it',
     },
     touch: {
       splash: 'swipe to turn · tap to jump · swipe your heading to spray',
@@ -36,6 +38,8 @@ const Layout = {
       continue: 'TAP',
       spray: 'swipe your heading to spray',
       bigHop: 'tap as you land for a big hop',
+      bigJump: 'jump off the top: the higher, the harder you hit',
+      tramp: 'tap as you land on a trampoline to pump it',
     },
     deck: {
       splash: '◀ ▶ to turn · jump · press your heading to spray',
@@ -45,6 +49,8 @@ const Layout = {
       continue: 'JUMP',
       spray: 'press your heading to spray',
       bigHop: 'press JUMP as you land for a big hop',
+      bigJump: 'jump off the top: the higher, the harder you hit',
+      tramp: 'press JUMP as you land on a trampoline to pump it',
     },
   },
 

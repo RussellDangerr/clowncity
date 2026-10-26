@@ -27,14 +27,19 @@ the jumps).
 
 | # | Level | Element 1 | Element 2 | Status |
 |---|---|---|---|---|
-| 1 | **The Big Top** (intro) | the basics: jump, turn, wall-jump, spray | (no gimmick) | merge of Big Top + Catwalk |
-| 2 | The Carousel | spinning deck (loop) | horses + brass rings | built, uncommitted |
-| 3 | The Duck River | rubber-duck rhythm | shooting gallery → drawbridge | built, uncommitted |
-| 4 | The Strongman | tower climb | hammer → bell | built, uncommitted |
-| 5 | **The Human Cannonball** | cannons | trampolines (twist: trapeze) | new |
+| 1 | **The Big Top** (intro) | the basics: jump, kicker, belt, spray | the turn (dead ends behind you) | built 2026-10-26: Big Top + Catwalk merged |
+| 2 | The Strongman | tower climb (wall-jumps) | jump for the hammer → bell | built; hammer is a skill since 10-26 |
+| 3 | The Duck River | rubber-duck rhythm | shooting gallery → drawbridge | built |
+| 4 | The Carousel | spinning deck (loop) | bouncy horses + brass rings | built; made fair 10-26 |
+| 5 | **The Human Cannonball** | cannons | trampolines (twist: trapeze) | new (trampolines exist now) |
 | 6 | **Balloon Bash** | rising balloons | basketball shot | new |
-| 7 | The Big Drop | the ramp launch | the tent is the door to the boss | exists, reworked ending |
+| 7 | The Big Drop | four jumps, checkpoints, trampoline nets | the zip-line shortcut, then the big drop into the tent | rebuilt 2026-10-26 |
 | 8 | **The Ringmaster** (boss) | the lion + whip | rings of fire (callbacks: trapeze, high wire, trampolines) | new |
+
+Order changed on 2026-10-26 (Caelan): the Strongman second (it drills the intro's
+wall-jumps and ends on a payoff), the Duck River's creek before the Carousel (it teaches
+bouncing gently), the Big Drop as the finale before the boss. Measured with a bot reacting
+100-150 ms late, the Big Top, Strongman and Big Drop main route all still finish.
 
 Eight levels: two rows of four on an upright phone (the level select already wraps).
 
