@@ -188,9 +188,15 @@ class OneWayPlatform {
       ctx.fillRect(this.x - 4, this.y, 4, 120);
       ctx.fillRect(this.x + this.w, this.y, 4, 120);
       ctx.strokeStyle = Tokens.color.tentCream;
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 3;
       ctx.beginPath(); ctx.moveTo(this.x, this.y + 1); ctx.lineTo(this.x + this.w, this.y + 1); ctx.stroke();
       ctx.lineWidth = 1;
+      // Bunting under the rope, so it reads from far below as somewhere to get to.
+      const pal = Tokens.color.carnival;
+      for (let fx = 8, n = 0; fx < this.w - 8; fx += 40, n++) {
+        ctx.fillStyle = pal[n % pal.length];
+        ctx.beginPath(); ctx.moveTo(this.x + fx, this.y + 3); ctx.lineTo(this.x + fx + 14, this.y + 3); ctx.lineTo(this.x + fx + 7, this.y + 15); ctx.closePath(); ctx.fill();
+      }
       return;
     }
     // Dashed/thin platform to visually signal one-way
