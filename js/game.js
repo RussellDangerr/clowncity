@@ -14,14 +14,22 @@ const Game = {
   transitionCallback: null,
   totalDeaths: 0,
   totalGems: 0,
+  objectiveTimer: 0,       // the level's goal line shows while > 0 (start of level, or bumping a lock)
 
-  // Save data
+  // Save data, one record per level NAME, so levels can be added, merged and
+  // reordered without scrambling anyone's progress. A level you've retired
+  // keeps its record; it just isn't shown.
   save: {
-    levelsComplete: [],     // boolean per level
-    bestDeaths: [],         // best (lowest) death count per level
-    gemsCollected: [],      // gems collected per level (count)
-    totalGemsPerLevel: [],  // total possible per level
+    version: 2,
+    levels: {},             // name -> { complete, bestDeaths (-1 = none), gems, totalGems }
   },
+
+  // The order levels sat in when saves were plain arrays by position (v0.4–v0.6
+  // live, then dev). Frozen here: Level.maps will keep changing, and the old
+  // arrays only make sense against the order that wrote them. v0.1–v0.3 had a
+  // different second and third level, but v0.4 already reused those slots, so
+  // reading them as Catwalk / Big Drop keeps what players see today.
+  legacyOrder: ['The Big Top', 'The Catwalk', 'The Big Drop', 'The Carousel', 'The Duck River', 'The Strongman'],
 
   init() {
     Engine.init();
@@ -64,22 +72,47 @@ const Game = {
 
   // ── Save / Load ──
   loadSave() {
+    this.save = { version: 2, levels: {} };
+    let data = null;
     try {
       const raw = localStorage.getItem('clowncity_save');
-      if (raw) {
-        const data = JSON.parse(raw);
-        // Only merge valid arrays
-        if (Array.isArray(data.levelsComplete)) this.save.levelsComplete = data.levelsComplete;
-        if (Array.isArray(data.bestDeaths)) this.save.bestDeaths = data.bestDeaths;
-        if (Array.isArray(data.gemsCollected)) this.save.gemsCollected = data.gemsCollected;
-        if (Array.isArray(data.totalGemsPerLevel)) this.save.totalGemsPerLevel = data.totalGemsPerLevel;
-      }
+      if (raw) data = JSON.parse(raw);
     } catch (e) { /* ignore corrupt saves */ }
-    // Ensure arrays are properly sized
-    while (this.save.levelsComplete.length < this.totalLevels) this.save.levelsComplete.push(false);
-    while (this.save.bestDeaths.length < this.totalLevels) this.save.bestDeaths.push(-1);
-    while (this.save.gemsCollected.length < this.totalLevels) this.save.gemsCollected.push(0);
-    while (this.save.totalGemsPerLevel.length < this.totalLevels) this.save.totalGemsPerLevel.push(0);
+    if (!data || typeof data !== 'object') return;
+    if (data.levels && typeof data.levels === 'object') {
+      for (const [name, r] of Object.entries(data.levels)) this.save.levels[name] = this._cleanRecord(r);
+    } else if (Array.isArray(data.levelsComplete)) {
+      // Old format: arrays by position. Move them onto names once; writeSave
+      // then stores the new format.
+      this.legacyOrder.forEach((name, i) => {
+        if (i >= data.levelsComplete.length) return;
+        this.save.levels[name] = this._cleanRecord({
+          complete: data.levelsComplete[i],
+          bestDeaths: (data.bestDeaths || [])[i],
+          gems: (data.gemsCollected || [])[i],
+          totalGems: (data.totalGemsPerLevel || [])[i],
+        });
+      });
+      this.writeSave();
+    }
+  },
+
+  _cleanRecord(r) {
+    r = r || {};
+    const num = (v, d) => (Number.isFinite(v) ? v : d);
+    return { complete: r.complete === true, bestDeaths: num(r.bestDeaths, -1), gems: num(r.gems, 0), totalGems: num(r.totalGems, 0) };
+  },
+
+  // The save record for level i (by its name), created on first use.
+  levelRecord(i) {
+    const name = Level.maps[i].name;
+    return this.save.levels[name] || (this.save.levels[name] = this._cleanRecord());
+  },
+
+  // Playable: the first level, the one after a level you've beaten, or one
+  // you've beaten yourself (adding a level ahead of it never locks it again).
+  levelUnlocked(i) {
+    return i === 0 || this.levelRecord(i - 1).complete || this.levelRecord(i).complete;
   },
 
   writeSave() {
@@ -108,9 +141,10 @@ const Game = {
     Player.spawn(Level.spawnX, Level.spawnY);
     Player.deathCount = 0;
     this.levelTimer = 0;
+    this.objectiveTimer = Level.maps[index].objective ? 6 : 0;
     Camera.snapToPlayer();
     // Store total collectibles for save data
-    this.save.totalGemsPerLevel[index] = Level.totalCollectibles;
+    this.levelRecord(index).totalGems = Level.totalCollectibles;
   },
 
   update(dt) {
@@ -167,8 +201,7 @@ const Game = {
       this._selectedLevel = Math.max(this._selectedLevel - 1, 0);
       Audio.uiSelect();
     }
-    // Check if level is accessible (previous level complete, or it's level 0)
-    const accessible = this._selectedLevel === 0 || this.save.levelsComplete[this._selectedLevel - 1];
+    const accessible = this.levelUnlocked(this._selectedLevel);
 
     // Select (confirm key or a tap)
     if ((Input.pressed('Space') || Input.pressed('Enter') || Input.pressed('KeyZ') || Input.tapped()) && accessible) {
@@ -198,12 +231,14 @@ const Game = {
 
     // Checkpoints: passing the flag's column at ANY height above it counts, so
     // jumping over one never costs it (respawn is still at the flag).
-    for (const cp of Level.checkpoints) {
-      if (!cp.active &&
+    // (Level.near: on a loop level, compare against this lap's copy of each.)
+    for (const flag of Level.checkpoints) {
+      const cp = Level.near(flag);
+      if (!flag.active &&
           Player.x + Player.w > cp.x && Player.x < cp.x + cp.w &&
           Player.y < cp.y + cp.h) {
         for (const other of Level.checkpoints) other.active = false;
-        cp.active = true;
+        flag.active = true;
         Player.setCheckpoint(cp.x, cp.y);
         Particles.burst(cp.x + cp.w / 2, cp.y + cp.h / 2, 12, 100, Tokens.rgba(Tokens.color.goldFlag, 0.7), 0.3);
         Audio.checkpoint();
@@ -211,11 +246,12 @@ const Game = {
     }
 
     // Collectibles
-    for (const col of Level.collectibles) {
-      if (!col.collected &&
+    for (const gem of Level.collectibles) {
+      const col = Level.near(gem);
+      if (!gem.collected &&
           Player.x + Player.w > col.x + 4 && Player.x < col.x + col.w - 4 &&
           Player.y + Player.h > col.y + 4 && Player.y < col.y + col.h - 4) {
-        col.collected = true;
+        gem.collected = true;
         Level.collectedCount++;
         Particles.burst(
           col.x + col.w / 2, col.y + col.h / 2,
@@ -225,11 +261,29 @@ const Game = {
       }
     }
 
-    // Goal
-    const goals = Level.getGoals();
+    // Brass rings: grab them all to open the goal.
+    for (const ring of Level.rings) {
+      const r = Level.near(ring);
+      if (!ring.collected &&
+          Player.x + Player.w > r.x + 4 && Player.x < r.x + r.w - 4 &&
+          Player.y + Player.h > r.y + 4 && Player.y < r.y + r.h - 4) {
+        ring.collected = true;
+        Level.ringsCollected++;
+        Particles.burst(r.x + r.w / 2, r.y + r.h / 2, 18, 140, Tokens.rgba(Tokens.color.ring, 0.9), 0.4);
+        Camera.shake(3);
+        Audio.collect();
+        if (!Level.goalLocked) { Engine.flash('white', 0.25); Audio.checkpoint(); }
+      }
+    }
+
+    // Goal (shut until the rings are in)
+    const goals = Level.goalLocked ? [] : Level.getGoals().map(g => Level.near(g));
     for (const g of goals) {
+      // The tent swallows Poko if he passes over its mouth at any height (like a
+      // checkpoint): an overshooting launch must never strand him past it.
+      const tent = Level.maps[this.currentLevel].tent;
       if (Player.x + Player.w > g.x && Player.x < g.x + g.w &&
-          Player.y + Player.h > g.y && Player.y < g.y + g.h) {
+          (tent ? Player.y < g.y + g.h : Player.y + Player.h > g.y && Player.y < g.y + g.h)) {
         Particles.burst(g.x + g.w / 2, g.y + g.h / 2, 30, 200, Tokens.rgba(Tokens.color.gold, 0.7), 0.5);
         Camera.shake(8);
         Engine.flash('white', 0.5);
@@ -239,15 +293,10 @@ const Game = {
         // Save progress
         this.totalDeaths += Player.deathCount;
         this.totalGems += Level.collectedCount;
-        this.save.levelsComplete[this.currentLevel] = true;
-        const bd = this.save.bestDeaths[this.currentLevel];
-        if (bd === -1 || Player.deathCount < bd) {
-          this.save.bestDeaths[this.currentLevel] = Player.deathCount;
-        }
-        const prevGems = this.save.gemsCollected[this.currentLevel];
-        if (Level.collectedCount > prevGems) {
-          this.save.gemsCollected[this.currentLevel] = Level.collectedCount;
-        }
+        const rec = this.levelRecord(this.currentLevel);
+        rec.complete = true;
+        if (rec.bestDeaths === -1 || Player.deathCount < rec.bestDeaths) rec.bestDeaths = Player.deathCount;
+        rec.gems = Math.max(rec.gems, Level.collectedCount);
         this.writeSave();
 
         if (Level.maps[this.currentLevel].tent) {
@@ -270,6 +319,14 @@ const Game = {
         this.timer = 0;
         return;
       }
+    }
+
+    // Ran into a lock (the shut gate, the raised drawbridge): say again what opens it.
+    if (this.objectiveTimer > 0) this.objectiveTimer -= dt;
+    const touch = { x: Player.x - 2, y: Player.y, w: Player.w + 4, h: Player.h };
+    if ((Level.goalLocked && Level.getGoals().some(g => aabb(touch, Level.near(g)))) ||
+        (Level.bridgeSpan.length && !Level.bridgeOpen && Level.tiles.some(t => t.bridge && aabb(touch, t)))) {
+      this.objectiveTimer = Math.max(this.objectiveTimer, 2.5);
     }
 
     // Pit death
@@ -467,18 +524,27 @@ const Game = {
     ctx.font = Tokens.font.heading;
     ctx.fillText('SELECT LEVEL', Engine.width / 2, 80);
 
-    const cardW = 180;
-    const cardH = 140;
-    const gap = 30;
-    const totalW = this.totalLevels * cardW + (this.totalLevels - 1) * gap;
-    const startX = (Engine.width - totalW) / 2;
-    const cardY = Engine.height / 2 - cardH / 2;
+    // Cards shrink to fit the row once there are more levels than the width holds
+    // (the gap first, down to 8px, so each card keeps ~110px for its text); if a
+    // single row would squeeze them under that, they wrap onto two rows.
+    const fit = (perRow) => {
+      const gap = Math.min(Tokens.space.cardGap, Math.max(8, (Engine.width - 40 - perRow * 110) / Math.max(1, perRow - 1)));
+      return { gap, cardW: Math.min(Tokens.space.cardW, (Engine.width - 40 - (perRow - 1) * gap) / perRow) };
+    };
+    let rows = 1, perRow = this.totalLevels, { gap, cardW } = fit(perRow);
+    if (cardW < 110) { rows = 2; perRow = Math.ceil(this.totalLevels / 2); ({ gap, cardW } = fit(perRow)); }
+    const cardH = rows > 1 ? 124 : Tokens.space.cardH;   // two rows: just tall enough for the stats
+    const rowGap = 12;
+    const startX = (Engine.width - (perRow * cardW + (perRow - 1) * gap)) / 2;
+    const firstY = Engine.height / 2 - (rows * cardH + (rows - 1) * rowGap) / 2 + (rows > 1 ? 14 : 0);
 
     for (let i = 0; i < this.totalLevels; i++) {
-      const x = startX + i * (cardW + gap);
+      const x = startX + (i % perRow) * (cardW + gap);
+      const cardY = firstY + Math.floor(i / perRow) * (cardH + rowGap);
       const selected = i === this._selectedLevel;
-      const accessible = i === 0 || this.save.levelsComplete[i - 1];
-      const complete = this.save.levelsComplete[i];
+      const rec = this.levelRecord(i);
+      const accessible = this.levelUnlocked(i);
+      const complete = rec.complete;
       const theme = Level.themes[Level.maps[i].theme];
 
       // Card background
@@ -522,13 +588,13 @@ const Game = {
         ctx.fillStyle = Tokens.rgba(Tokens.color.success, 0.6);
         ctx.font = Tokens.font.xs;
         ctx.fillText('COMPLETE', x + cardW / 2, cardY + 80);
-        const bd = this.save.bestDeaths[i];
+        const bd = rec.bestDeaths;
         if (bd >= 0) {
           ctx.fillStyle = Tokens.rgba(Tokens.color.dust, 0.5);
           ctx.fillText(`best: ${bd} deaths`, x + cardW / 2, cardY + 98);
         }
-        const gc = this.save.gemsCollected[i];
-        const tc = this.save.totalGemsPerLevel[i];
+        const gc = rec.gems;
+        const tc = rec.totalGems;
         if (tc > 0) {
           ctx.fillText(`gems: ${gc} / ${tc}`, x + cardW / 2, cardY + 114);
         }
@@ -566,6 +632,26 @@ const Game = {
       ctx.fillStyle = Tokens.rgba(Tokens.color.dust, alpha * 0.5);
       ctx.font = Tokens.font.xs;
       ctx.fillText(`${this.currentLevel + 1} / ${this.totalLevels}`, Engine.width / 2, 52);
+      ctx.textAlign = 'left';
+    }
+
+    // The level's goal (and how to do the new move), under the name.
+    const objective = Level.maps[this.currentLevel].objective;
+    if (objective && this.objectiveTimer > 0) {
+      const a = Math.min(1, this.objectiveTimer);
+      ctx.textAlign = 'center';
+      ctx.font = Tokens.font.md;
+      const w = ctx.measureText(objective[0]).width + 32;
+      ctx.globalAlpha = a * 0.85;
+      this._panel(ctx, Engine.width / 2 - w / 2, 60, w, objective[1] ? 46 : 28);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = Tokens.rgba(Tokens.color.gold, a);
+      ctx.fillText(objective[0], Engine.width / 2, 79);
+      if (objective[1]) {
+        ctx.font = Tokens.font.xs;
+        ctx.fillStyle = Tokens.rgba(Tokens.color.dust, a * 0.8);
+        ctx.fillText(Layout.hint(objective[1]), Engine.width / 2, 97);
+      }
       ctx.textAlign = 'left';
     }
 
@@ -613,6 +699,39 @@ const Game = {
       ctx.lineTo(dx, 18);
       ctx.closePath();
       ctx.fill();
+      ctx.textAlign = 'left';
+    }
+
+    // Gallery counter (tin ducks down), under the gems: the drawbridge's lock.
+    if (Level.targetsTotal > 0) {
+      const label = `${Level.targetsHit} / ${Level.targetsTotal}`;
+      const [, , ring] = Tokens.color.tin;
+      ctx.fillStyle = Level.bridgeOpen ? Tokens.rgba(Tokens.color.success, 0.8) : ring;
+      ctx.font = Tokens.font.body;
+      ctx.textAlign = 'right';
+      ctx.fillText(label, Engine.width - 16, 46);
+      const ix = Engine.width - 16 - ctx.measureText(label).width - 9;
+      ctx.strokeStyle = ctx.fillStyle;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(ix, 41, 5, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(ix, 41, 1.5, 0, Math.PI * 2); ctx.stroke();
+      ctx.lineWidth = 1;
+      ctx.textAlign = 'left';
+    }
+
+    // Brass-ring counter, under the gems: the goal's lock.
+    if (Level.rings.length > 0) {
+      const label = `${Level.ringsCollected} / ${Level.rings.length}`;
+      ctx.fillStyle = Tokens.rgba(Tokens.color.ring, Level.goalLocked ? 0.8 : 1);
+      ctx.font = Tokens.font.body;
+      ctx.textAlign = 'right';
+      ctx.fillText(label, Engine.width - 16, 46);
+      ctx.strokeStyle = ctx.fillStyle;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(Engine.width - 16 - ctx.measureText(label).width - 9, 41, 5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.lineWidth = 1;
       ctx.textAlign = 'left';
     }
 

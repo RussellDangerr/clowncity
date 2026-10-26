@@ -64,6 +64,16 @@ const Tokens = {
     tentRed:   '#b5202a',  // circus tent stripe (red)
     tentCream: '#f3e2b8',  // circus tent stripe (cream)
     tentMouth: '#140a16',  // dark tent entrance
+    deck:      ['#123c44', '#1c5660', '#2f7f8a'], // carousel deck tile [dark, mid, light]
+    deckGlow:  [140, 230, 230],                  // deck chevrons (they move at the spin speed)
+    brass:     '#d4a640',  // carousel poles + the brass ring's arm
+    ring:      [255, 205, 70], // the brass ring
+    horse:     ['#f3e2b8', '#e23b30', '#3b82d6'], // carousel horse [body, saddle, mane]
+    plank:     ['#3d3328', '#55473a', '#73614f'], // drawbridge planks [dark, mid, light] (weathered, not boost-brown)
+    water:     [40, 110, 170],                   // river body
+    foam:      [170, 220, 255],                  // river surface ripples + splash
+    duck:      ['#ffd23f', '#f28c28', '#c9a227'], // rubber duck [body, beak, shade]
+    tin:       ['#b8c0c8', '#7d868f', '#e04848'], // gallery tin duck [face, shade, target ring]
   },
 
   // ── Typography ── monospace scale for the game UI, plus the marquee faces ──

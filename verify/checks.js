@@ -247,6 +247,7 @@
       for (const s of ['keys', 'deck']) {
         Layout.force = s; Layout.apply();
         for (let i = 0; i < Game.totalLevels; i++) {
+          if (Level.maps[i].bot === false) continue;   // levels the pit-jumping bot can't play have their own checks
           const r = playLevel(i, { lead: 24 });
           assert(r.result === 'goal', `${s} / ${r.level}: ${r.result}`);
           out.push(`${s}/${r.level} ${r.time}s`);
@@ -262,6 +263,7 @@
         Layout.force = s; Layout.apply();
         const worst = { cruise: { t: Infinity }, over: { t: Infinity } };
         for (let i = 0; i < Game.totalLevels; i++) {
+          if (Level.maps[i].bot === false) continue;   // levels the pit-jumping bot can't play have their own checks
           const right = [];
           const r = playLevel(i, { lead: 24, log: true, onFrame: () => right.push(Camera.x + Engine.width) });
           for (const d of r.decisions) {
@@ -297,6 +299,7 @@
     async goalCoast() {
       const out = [];
       for (let i = 0; i < Game.totalLevels; i++) {
+        if (Level.maps[i].bot === false) continue;
         let atGoal = null;
         const r = playLevel(i, { lead: 24, postSeconds: 5, onFrame: () => {
           if (!atGoal && Player.finished) atGoal = { x: Player.x, y: Player.y };
@@ -330,7 +333,7 @@
       assert(Tokens.font.lock, 'Tokens.font.lock missing');
       Engine.ctx.font = Tokens.font.lock;
       const want = Engine.ctx.font;                       // canvas-normalised form
-      Game.save.levelsComplete = [false, false, false];
+      Game.save.levels = {};                              // nothing beaten: every level after the first is locked
       Game.state = 'levelSelect';
       const locked = drawTexts().find(t => t.text === 'LOCKED');
       assert(locked && locked.font === want, `LOCKED should use Tokens.font.lock (got ${locked && locked.font})`);
@@ -443,10 +446,13 @@
     async rampLaunch() {
       const i = Level.maps.findIndex(m => m.name === 'The Big Drop');
       play(i);
-      const ramp = Level.ramps[0];
+      const ramp = Level.ramps[Level.ramps.length - 1];                   // the big one (the kicker at jump 3 comes first)
       const bowl = ramp.pts.reduce((a, p) => (p.y > a.y ? p : a));        // lowest point
       const ride = (pressAt) => {
         play(i); cleanInput();
+        Player.spawn(ramp.x0 - 8 * Level.tileSize, ramp.pts[0].y - Player.h, 0.01);   // cruising on the final plateau
+        Player.respawning = false;
+        Object.assign(Player, { vx: Player.runSpeed, runState: 'cruise', rampT: 1 });
         let pressed = pressAt == null, launch = null;
         for (let f = 0; f < 12 * 120; f++) {
           if (!pressed && Player.grounded && Player.x + Player.w / 2 >= pressAt) { Input.tapKey('Space'); pressed = true; }
@@ -466,11 +472,472 @@
       }
       return `free launch ${free.launch.vx.toFixed(0)}/${free.launch.vy.toFixed(0)} px/s falls short; presses at the bowl, kicker and lip all reach the tent`;
     },
+    // The Carousel: a loop whose deck carries Poko. With the spin he covers
+    // cruise + deckSpeed, against it cruise − deckSpeed; the seam is invisible
+    // (no snag, no camera jump); a horse seats and carries him; each brass ring
+    // takes the step it's meant to (A deck, B horse, C booth roof); and the
+    // exit stays shut until all three are in. Patrols are removed so they
+    // can't muddy the measurements.
+    async carousel() {
+      const i = Level.maps.findIndex(m => m.wrap);
+      const S = Level.maps[i].deckSpeed, T = Level.tileSize, run = Player.runSpeed;
+      const fresh = () => {
+        play(i); cleanInput();
+        Entities.list = Entities.list.filter(e => !(e instanceof PatrolEnemy));
+      };
+      const deckAt = (col) => { fresh(); Player.spawn(col * T, 21 * T, Player.respawnRampTime); };
+      const speedOver = (sec) => { const x0 = Player.x; step(sec); return (Player.x - x0) / sec; };
+
+      // 1) Speed with and against the spin.
+      deckAt(35); step(1.0);
+      const withSpin = speedOver(0.5);
+      assert(Math.abs(withSpin - (run + S)) < 15, `with the spin: ${withSpin.toFixed(0)} px/s, want ${run + S}`);
+      deckAt(66); step(0.2); Input.runDir = -1; step(1.2);
+      const against = speedOver(0.5);
+      assert(Math.abs(against + (run - S)) < 15, `against the spin: ${against.toFixed(0)} px/s, want ${-(run - S)}`);
+
+      // 2) Across the seam: never leaves the deck, camera moves smoothly.
+      const W = Level.levelWidth;
+      deckAt(108); step(0.8);
+      let maxCam = 0, airborne = 0, cam = Camera.x;
+      for (let f = 0; f < 120; f++) {
+        step(Engine.fixedDt);
+        maxCam = Math.max(maxCam, Math.abs(Camera.x - cam)); cam = Camera.x;
+        if (!Player.grounded) airborne++;
+      }
+      assert(Player.x > W + 64 && !Player.dead, `didn't roll through the seam (x ${Player.x.toFixed(0)}, W ${W})`);
+      assert(airborne === 0, `left the deck for ${airborne} frames at the seam`);
+      assert(maxCam < 10, `camera jumped ${maxCam.toFixed(1)} px in a frame at the seam`);
+
+      // Put horse h with its left edge at x, at bob phase θ (0 = lowest, π = top),
+      // and drop Poko onto its back from just above.
+      const horseAt = (h, x, theta) => {
+        h.x = x; h.t = (((theta - h.phase) / (2 * Math.PI)) * h.period % h.period + h.period) % h.period;
+        h.y = h._bobY(); h.prevY = h.y;
+      };
+      const dropOn = (h) => {
+        Player.spawn(h.x + 4, h.y - Player.h - 4, 0.01); Player.respawning = false;
+        Object.assign(Player, { vx: run, runState: 'cruise', rampT: 1, vy: 60, carry: S });
+      };
+      const horse = () => Entities.list.find(e => e instanceof CarouselHorse);
+      // Step until Poko bounces (grounded and going up); optionally press right then.
+      const bounce = (press) => {
+        for (let f = 0; f < 60; f++) {
+          step(Engine.fixedDt);
+          if (Player.grounded && Player.vy < 0) { if (press) Input.tapKey('Space'); return true; }
+        }
+        return false;
+      };
+
+      // 3) A horse bounces Poko and hands him the deck's carry.
+      fresh(); step(0.1);
+      const h = horse(); horseAt(h, 50 * T, Math.PI); dropOn(h);
+      assert(bounce(false), 'landing on a horse should bounce');
+      assert(Player.carry === S && Player.vy <= -Player.duckBounce + 30, `horse bounce: vy ${Player.vy.toFixed(0)}, carry ${Player.carry}`);
+
+      // Sweep takeoff points; true if any try from `setup` grabs `ring`.
+      const tries = (setup, xs, ring) => xs.some(x => {
+        setup(x);
+        for (let f = 0; f < 150 && !Player.dead; f++) step(Engine.fixedDt);
+        return ring.collected;
+      });
+      const xsNear = (col, from, to) => { const a = []; for (let d = from; d <= to; d += 6) a.push(col * T + d); return a; };
+      const fromDeck = (x) => {                 // cruising on the deck with the spin, jump at x
+        deckAt(Math.floor(x / T) - 8); step(0.6);
+        for (let f = 0; Player.x < x && f < 1200; f++) step(Engine.fixedDt);
+        Input.tapKey('Space');
+      };
+      const fromHorse = (theta, press) => (x) => { fresh(); step(0.05); const h = horse(); horseAt(h, x, theta); dropOn(h); bounce(press); };
+      const fromRoof = (x) => {                 // rolling along the booth roof, jump at x
+        fresh(); Player.spawn(96 * T, 17 * T - Player.h, 0.01); Player.respawning = false;
+        Object.assign(Player, { vx: run, runState: 'cruise', rampT: 1 });
+        step(Engine.fixedDt * 2);
+        for (let f = 0; Player.x < x && f < 1200; f++) step(Engine.fixedDt);
+        Input.tapKey('Space');
+      };
+      const ringA = () => Level.rings.find(r => r.x === 20 * T);
+      const ringC = () => Level.rings.find(r => r.x === 110 * T);
+      const rider = () => Entities.list.find(e => e.ring);
+      assert(tries(fromDeck, xsNear(20, -320, 0), { get collected() { return ringA().collected; } }), 'ring A: no deck jump reaches it');
+
+      // Ring B rides horse 3. A pressed bounce off its back grabs it from any
+      // height of the bob and anywhere on the back; a deck jump tops out under it.
+      let ringBMisses = [];
+      for (const theta of [0, Math.PI / 2, Math.PI, 3 * Math.PI / 2]) {
+        for (const at of [-10, 20, 44, 64]) {    // back edge to front edge (he rolls 400px/s while he drops)
+          fresh(); step(0.05);
+          const h = rider(); horseAt(h, 50 * T, theta); h._placeRing();
+          Player.spawn(h.x + at, h.y - Player.h - 1, 0.01); Player.respawning = false;   // 1px up: a longer drop rolls him off the front
+          Object.assign(Player, { vx: run, runState: 'cruise', rampT: 1, vy: 60, carry: S });
+          bounce(true);
+          for (let f = 0; f < 120 && !h.ring.collected; f++) step(Engine.fixedDt);
+          if (!h.ring.collected) ringBMisses.push(`θ ${theta.toFixed(2)} at ${at}`);
+        }
+      }
+      assert(!ringBMisses.length, `ring B: pressed bounces off its horse missed it (${ringBMisses.join(', ')})`);
+      deckAt(40); step(0.6);
+      let deckTop = Infinity;
+      Input.tapKey('Space');
+      for (let f = 0; f < 90; f++) { step(Engine.fixedDt); deckTop = Math.min(deckTop, Player.y); }
+      const rb = rider().ring;
+      assert(deckTop > rb.y + rb.h - 4, `ring B: a deck jump reaches its catch area (top ${deckTop.toFixed(0)} vs ${rb.y + rb.h - 4})`);
+
+      assert(!tries(fromHorse(Math.PI, true), xsNear(110, -320, 0), { get collected() { return ringC().collected; } }), 'ring C: a horse bounce reaches it (it should need the booth roof)');
+      assert(tries(fromRoof, xsNear(110, -360, -60), { get collected() { return ringC().collected; } }), 'ring C: no jump off the booth roof reaches it');
+
+      // 4) A pressed bounce off a horse mid-bob lands on the booth roof.
+      const roofY = 17 * T;
+      const landsOnRoof = xsNear(88, -400, 0).some(x => {
+        fromHorse(Math.PI / 2, true)(x);
+        for (let f = 0; f < 120; f++) {
+          step(Engine.fixedDt);
+          if (Player.grounded && Math.abs(Player.y + Player.h - roofY) < 1) return true;
+        }
+        return false;
+      });
+      assert(landsOnRoof, 'no pressed bounce off a horse mid-bob lands on the booth roof');
+
+      // 5) The exit is shut until all three rings are in.
+      const goal = Level.getGoals()[0];
+      const throughGoal = () => {
+        Player.spawn(goal.x - 6 * T, 21 * T, 0.01); Player.respawning = false;
+        Object.assign(Player, { vx: run, runState: 'cruise', rampT: 1 });
+        for (let f = 0; f < 120 && !Player.finished; f++) step(Engine.fixedDt);
+        return Player.finished;
+      };
+      fresh();
+      Level.rings[0].collected = Level.rings[1].collected = true; Level.ringsCollected = 2;
+      assert(!throughGoal(), 'the exit opened with a ring still out');
+      fresh();
+      for (const r of Level.rings) r.collected = true;
+      Level.ringsCollected = Level.rings.length;
+      assert(throughGoal(), 'the exit stayed shut with every ring in');
+      return `with spin ${withSpin.toFixed(0)}, against ${against.toFixed(0)} px/s; seam smooth (cam ≤${maxCam.toFixed(1)}px/frame); ring A from the deck, B off its horse at any bob height, C off the roof; exit locks`;
+    },
+    // The Duck River: water kills; a rubber duck bounces Poko and hands him the
+    // current; the stream's spacing is the rhythm (small gaps chain with no
+    // input, the big gap needs a press and drowns you without one); a whole
+    // river crossing works pressing only at the big gaps; spraying in the
+    // gallery pen knocks every tin duck down; and the drawbridge is a wall
+    // until then and a road after.
+    async duckRiver() {
+      const i = Level.maps.findIndex(m => m.name === 'The Duck River');
+      const T = Level.tileSize, run = Player.runSpeed;
+      const fresh = (keepDucks = true) => {
+        play(i); cleanInput();
+        Entities.list = Entities.list.filter(e => !(e instanceof PatrolEnemy) && (keepDucks || !(e instanceof DuckStream)));
+      };
+      const cruising = (x, y) => {
+        Player.spawn(x, y, 0.01); Player.respawning = false;
+        Object.assign(Player, { vx: run, runState: 'cruise', rampT: 1 });
+      };
+
+      // 1) Water kills.
+      fresh(false); cruising(18 * T, 18 * T);
+      for (let f = 0; f < 120 && !Player.dead; f++) step(Engine.fixedDt);
+      assert(Player.dead && Player.y < Level.levelHeight, `falling in the creek should drown Poko (dead ${Player.dead}, y ${Player.y.toFixed(0)})`);
+
+      // Riding the river stream: land Poko on duck `d` (in its own frame).
+      const river = () => Entities.list.filter(e => e instanceof DuckStream)[1];
+      const landOn = (s, d) => {
+        cruising(d.x + 12, s._bobY(d) - Player.h - 2);
+        Object.assign(Player, { vy: 120, carry: s.speed });
+      };
+      // Step until the next duck bounce (or a death / the far bank); returns the duck.
+      const nextBounce = (s, pressAtBounce) => {
+        for (let f = 0; f < 240; f++) {
+          step(Engine.fixedDt);
+          if (Player.dead) return 'drowned';
+          if (Player.grounded && !Player.surfaceSpeed) return 'bank';
+          if (Player.grounded && Player.vy < 0 && Player.surfaceSpeed === s.speed) {
+            const feet = Player.y + Player.h;
+            const on = s.ducks.find(d => Player.x + Player.w > d.x && Player.x < d.x + s.w && Math.abs(feet - s._bobY(d)) < 4);
+            if (pressAtBounce && pressAtBounce(on)) Input.tapKey('Space');
+            return on || 'unknown';
+          }
+        }
+        return 'timeout';
+      };
+      const ahead = (s, d) => s.ducks.filter(o => o.x > d.x).reduce((a, o) => (!a || o.x < a.x ? o : a), null);
+
+      // 2) A duck bounces Poko and hands him the current.
+      fresh(); step(0.1);
+      let s = river(), d = s.ducks[Math.floor(s.ducks.length / 2)];
+      landOn(s, d);
+      const hit = nextBounce(s);
+      assert(hit === d, `landing on a duck should bounce off it (got ${typeof hit === 'string' ? hit : 'another duck'})`);
+      assert(Player.vy <= -Player.duckBounce + 30 && Player.carry === s.speed, `bounce vy ${Player.vy.toFixed(0)}, carry ${Player.carry}`);
+
+      // 3) The rhythm: from each gap size, unpressed and pressed (at the bounce).
+      const tryGap = (want, press) => {
+        fresh(); step(0.1);
+        const s = river();
+        const d = s.ducks.find(o => { const n = ahead(s, o); return n && Math.abs(n.x - o.x - want) < 1 && n.x < s.x1 - 200; });
+        landOn(s, d);
+        const first = nextBounce(s, () => press);
+        if (first !== d) return 'missed the first duck';
+        const n = ahead(s, d);
+        const second = nextBounce(s);
+        return second === n ? 'next' : typeof second === 'string' ? second : 'other';
+      };
+      const small = tryGap(144, false), bigNo = tryGap(296, false), bigYes = tryGap(296, true);
+      assert(small === 'next', `a 144px gap should chain with no press (got ${small})`);
+      assert(bigNo === 'drowned', `a 296px gap should drown an unpressed hop (got ${bigNo})`);
+      assert(bigYes === 'next', `a 296px gap should be cleared by a pressed hop (got ${bigYes})`);
+
+      // 4) Each river crossed end to end, pressing only where the next gap is big.
+      const crossings = [];
+      for (const [si, bankCol] of [[1, 74], [2, 112]]) {
+        fresh(); step(0.1);
+        s = Entities.list.filter(e => e instanceof DuckStream)[si];
+        d = s.ducks.reduce((a, o) => (o.x < a.x ? o : a));          // the newest, furthest upstream
+        landOn(s, d);
+        let hops = 0, end = null;
+        for (let k = 0; k < 60 && !end; k++) {
+          // Press for a big gap; off the last duck, press only if the bank is far.
+          const r = nextBounce(s, (on) => {
+            const n = on && ahead(s, on);
+            return n ? n.x - on.x > 200 : s.x1 - (Player.x + Player.w) > 150;
+          });
+          if (typeof r === 'string') end = r; else { d = r; hops++; }
+        }
+        assert(end === 'bank' && Player.x > bankCol * T, `river ${si}: ended '${end}' after ${hops} hops at col ${(Player.x / T).toFixed(1)}`);
+        crossings.push(hops);
+      }
+
+      // 4b) Boarding off the bank. A jump only lands within ~264px of the edge and
+      // the big gap is nearly that wide, so if Poko arrives as it passes the mouth,
+      // no jump lands: he turns on the bank and comes back. Sweep arrival times
+      // over one whole stream cycle and require that the longest stretch of
+      // unboardable arrivals is short enough for one turnaround (≤ 1.2s).
+      s = river();
+      const cycle = s.gaps.reduce((a, g) => a + g, 0) / s.speed, N = 24;
+      const boardable = [];
+      for (let phase = 0; phase < N; phase++) {
+        let ok = false;
+        for (let x = 33 * T; x <= 41 * T && !ok; x += 8) {
+          fresh(); step(cycle * phase / N);
+          const st = river();
+          cruising(31 * T, 21 * T);
+          for (let f = 0; Player.x < x && f < 600; f++) step(Engine.fixedDt);
+          Input.tapKey('Space');
+          ok = typeof nextBounce(st) !== 'string';
+        }
+        boardable.push(ok);
+      }
+      let worst = 0;
+      for (let p = 0; p < N; p++) {                 // longest run of misses, wrapping round the cycle
+        let run = 0;
+        while (run < N && !boardable[(p + run) % N]) run++;
+        worst = Math.max(worst, run);
+      }
+      const worstWait = worst * cycle / N;
+      assert(worstWait <= 1.2, `boarding: up to ${worstWait.toFixed(2)}s of arrivals can't reach a duck (${boardable.map(b => (b ? 1 : 0)).join('')})`);
+
+      // 5) The drawbridge is a wall while any tin duck stands.
+      fresh(); cruising(126 * T, 21 * T);
+      step(2);
+      assert(Player.x < 137 * T, `got past the raised drawbridge (col ${(Player.x / T).toFixed(1)})`);
+
+      // 6) The gallery: turn at every wall and spin-spray in between.
+      fresh(); cruising(121 * T, 21 * T);
+      let t = 0, turns = 0, sprays = 0, lastSpray = 0;
+      const wallAhead = () => !!Level._tileGrid[Math.floor((Player.x + Player.w / 2 + Player.travelDir * 40) / T) + ',21'];
+      for (; t < 40 && !Level.bridgeOpen; t += Engine.fixedDt) {
+        if (Player.runState !== 'brake' && wallAhead()) { Input.runDir = -Player.travelDir; Input._swipeEdge = Input.runDir; turns++; }
+        else if (t - lastSpray > 0.4 && Player.momentum >= Player.attackThreshold) {
+          Input._swipeEdge = Player.travelDir; sprays++; lastSpray = t;
+        }
+        step(Engine.fixedDt);
+      }
+      assert(Level.bridgeOpen, `gallery: ${Level.targetsHit}/${Level.targetsTotal} tin ducks down after 40s`);
+      const gallery = `${Level.targetsTotal} tin ducks in ${t.toFixed(1)}s (${turns} turns, ${sprays} sprays)`;
+
+      // 7) Lowered, the bridge carries Poko over the lock to the goal.
+      Input.runDir = 1; cruising(131 * T, 21 * T);
+      for (let f = 0; f < 120 * 8 && !Player.finished && !Player.dead; f++) step(Engine.fixedDt);
+      assert(Player.finished, `after the bridge dropped: finished ${Player.finished}, dead ${Player.dead}, col ${(Player.x / T).toFixed(1)}`);
+      return `drowns; bounce ${Player.duckBounce}; 144 chains, 296 needs a press; rivers in ${crossings.join(' + ')} hops; boarding blocked ≤${worstWait.toFixed(2)}s per ${cycle.toFixed(1)}s cycle; ${gallery}; bridge → goal`;
+    },
+    // The Strongman: going off the top grabs the hammer, which locks the wheel
+    // and drops Poko straight down; the strike is graded by drop height. Rolling
+    // off falls just short of the bell and puts him back at the top checkpoint
+    // for another go; JUMPING off for the hammer rings it, the camera riding up
+    // with the puck; the exit is shut until the bell rings. (The bot, which jumps
+    // at the edge, plays the whole level in allLevels.)
+    async strongman() {
+      const i = Level.maps.findIndex(m => m.name === 'The Strongman');
+      const T = Level.tileSize, run = Player.runSpeed;
+      const fresh = () => { play(i); cleanInput(); Entities.list = Entities.list.filter(e => !(e instanceof PatrolEnemy)); };
+      const machine = () => Entities.list.find(e => e instanceof Strongman);
+      const cruising = (x, y) => {
+        Player.spawn(x, y, 0.01); Player.respawning = false;
+        Object.assign(Player, { vx: run, runState: 'cruise', rampT: 1 });
+      };
+      // Off the top heading for the hammer; jump at x (or roll off if null).
+      // Steps until the machine settles; reports what happened.
+      const goFor = (jumpAt) => {
+        fresh();
+        Player.setCheckpoint(6 * T, 3 * T);                 // as if he passed the top flag
+        cruising(17 * T, 3 * T);
+        const sm = machine();
+        let grabX = null, maxDrift = 0, camTop = Infinity, jumped = jumpAt === null;
+        for (let f = 0; f < 120 * 12 && sm.state !== 'done' && !(grabX !== null && sm.state === 'hanging'); f++) {
+          if (!jumped && Player.x >= jumpAt) { Input.tapKey('Space'); jumped = true; }
+          step(Engine.fixedDt);
+          if (sm.state === 'carried') {
+            if (grabX === null) grabX = Player.x;
+            maxDrift = Math.max(maxDrift, Math.abs(Player.x - grabX));
+            assert(Player.vx === 0, `the wheel should lock while hauling (vx ${Player.vx})`);
+          }
+          if (sm.state === 'flight') camTop = Math.min(camTop, Camera.y);
+        }
+        return { sm, grabX, maxDrift, camTop };
+      };
+
+      // 1) Roll off with no input: grabs, drops straight, peaks just under the
+      //    bell, and Poko is put back at the top checkpoint.
+      const roll = goFor(null);
+      assert(roll.grabX !== null, 'rolling off the top never grabbed the hammer');
+      assert(roll.maxDrift < 1, `the hammer drop should be straight down (drifted ${roll.maxDrift.toFixed(1)}px)`);
+      assert(!Level.bellRung, `rolling off shouldn't ring the bell (puck top ${roll.sm.puckTop.toFixed(0)}, bell ${roll.sm.bellBottom})`);
+      assert(roll.sm.puckTop < roll.sm.bellBottom + 120, `a roll-off should come close (puck top ${roll.sm.puckTop.toFixed(0)}, bell ${roll.sm.bellBottom})`);
+      assert(roll.sm.state === 'hanging' && !Player.hauling && Player.y < 5 * T, `after a weak hit Poko should be back at the top with the hammer on its hook (state ${roll.sm.state}, row ${(Player.y / T).toFixed(1)})`);
+
+      // 2) Jump off for it: rings, with the camera riding up to the bell. Any
+      //    jump from the last few tiles of the top floor works.
+      let rang = 0, camTop = Infinity, ringTop = null;
+      for (const tiles of [3, 2, 1]) {
+        const r = goFor(22 * T - tiles * T);
+        if (Level.bellRung && r.sm.state === 'done') { rang++; camTop = Math.min(camTop, r.camTop); ringTop = r.sm.puckTop; }
+      }
+      assert(rang === 3, `jumping off for the hammer from 1-3 tiles before the edge should ring every time (rang ${rang}/3)`);
+      assert(camTop < machine().bellY + 200, `the camera should ride up to the bell (got to y ${camTop.toFixed(0)})`);
+
+      // 3) The exit is shut until the bell rings.
+      const goal = Level.getGoals()[0];
+      fresh(); cruising(goal.x - 6 * T, 41 * T);
+      for (let f = 0; f < 120 && !Player.finished; f++) step(Engine.fixedDt);
+      assert(!Player.finished, 'the exit opened before the bell rang');
+      return `roll-off: puck to ${roll.sm.puckTop.toFixed(0)} (bell ${roll.sm.bellBottom}), no ring, back at the top; jump-off rings 3/3; camera reached y ${camTop.toFixed(0)}; exit locked till the ding`;
+    },
+    // Saves are keyed by level name. An old save (arrays by position, as v0.4–v0.6
+    // write it) moves onto names once and is rewritten in the new format; a
+    // beaten level never locks again even if a level is put ahead of it; junk
+    // and corrupt saves load as empty.
+    async saveMigration() {
+      const load = (raw) => {
+        if (raw == null) localStorage.removeItem('clowncity_save'); else localStorage.setItem('clowncity_save', raw);
+        Game.loadSave();
+      };
+      // 1) A live-site save: Big Top and Catwalk beaten, Big Drop not.
+      load(JSON.stringify({ levelsComplete: [true, true, false], bestDeaths: [2, 5, -1], gemsCollected: [7, 4, 0], totalGemsPerLevel: [9, 7, 2] }));
+      const L = Game.save.levels;
+      assert(L['The Big Top'].complete && L['The Big Top'].bestDeaths === 2 && L['The Big Top'].gems === 7 && L['The Big Top'].totalGems === 9, `Big Top migrated wrong: ${JSON.stringify(L['The Big Top'])}`);
+      assert(L['The Catwalk'].complete && L['The Catwalk'].bestDeaths === 5 && L['The Catwalk'].gems === 4, `Catwalk migrated wrong: ${JSON.stringify(L['The Catwalk'])}`);
+      assert(!L['The Big Drop'].complete && L['The Big Drop'].bestDeaths === -1, `Big Drop migrated wrong: ${JSON.stringify(L['The Big Drop'])}`);
+      const written = JSON.parse(localStorage.getItem('clowncity_save'));
+      assert(written.version === 2 && written.levels && !written.levelsComplete, 'the migrated save should be rewritten in the new format');
+      const idx = (name) => Level.maps.findIndex(m => m.name === name);
+      assert(Game.levelUnlocked(idx('The Strongman')), 'the level after the beaten Big Top should be unlocked');
+      assert(!Game.levelUnlocked(idx('The Duck River')), 'the Duck River should be locked until the Strongman is beaten');
+      assert(!Game.levelUnlocked(idx('The Big Drop')), 'the Big Drop (now the finale) should be locked: it and the level before it are unbeaten');
+
+      // 2) The new format round-trips, and a beaten level stays open with its predecessor unbeaten.
+      load(JSON.stringify({ version: 2, levels: { 'The Strongman': { complete: true, bestDeaths: 0, gems: 12, totalGems: 12 } } }));
+      assert(Game.save.levels['The Strongman'].gems === 12, 'a v2 save should load as written');
+      assert(Game.levelUnlocked(idx('The Strongman')), 'a beaten level should never lock, even with the one before it unbeaten');
+      assert(!Game.levelUnlocked(idx('The Carousel')), 'an unbeaten level behind an unbeaten one should stay locked');
+
+      // 3) Junk: corrupt JSON, wrong types, and no save at all all load as empty.
+      for (const raw of ['{not json', JSON.stringify({ levelsComplete: 'yes', levels: 3 }), JSON.stringify(null), null]) {
+        load(raw);
+        assert(Object.keys(Game.save.levels).length === 0 && Game.levelUnlocked(0) && !Game.levelUnlocked(1), `junk save ${String(raw).slice(0, 20)} should load as empty`);
+      }
+      load(JSON.stringify({ version: 2, levels: { 'The Big Top': { complete: 'yes', bestDeaths: 'x' } } }));
+      assert(Game.save.levels['The Big Top'].complete === false && Game.save.levels['The Big Top'].bestDeaths === -1, 'bad fields in a record should fall back to defaults');
+      return 'old position arrays → names (Big Top 2 deaths/7 gems, Catwalk, Big Drop), rewritten as v2; beaten levels never relock; junk loads empty';
+    },
+    // Winnable from the spawn point, the way a careful player plays (verify/
+    // solve.js: looks ahead before each press, only takes jumps with ≥ 0.1s
+    // of slack, turns to wait otherwise). Each level is run at several
+    // timings of its moving parts, so no win depends on luck.
+    async fullRuns() {
+      const out = [];
+      for (const name of ['The Carousel', 'The Duck River']) {
+        const times = [];
+        for (const warp of [0, 1.2, 2.4, 3.6]) {
+          const r = solveLevel(name, { warp, maxSeconds: 75 });
+          assert(r.result === 'goal', `${name} (warp ${warp}): ${r.result} after ${r.time}s, rings ${r.rings}, targets ${r.targets}`);
+          times.push(`${r.time}s${r.deaths.length ? `/${r.deaths.length}✝` : ''}`);
+        }
+        out.push(`${name}: ${times.join(' ')}`);
+      }
+      return out.join(' · ');
+    },
+    // The Big Drop's jumps: falling short at jump 1 lands on a trampoline that
+    // bounces Poko back up onto the boardwalk; pumping it reaches the zip line,
+    // whose ride ends on the final plateau and (with the press at the big ramp)
+    // in the tent; jump 3's net puts him on ledge 3; and a fall at jump 4 only
+    // costs jump 4 (he respawns at ledge 3's checkpoint).
+    async bigDropJumps() {
+      const i = Level.maps.findIndex(m => m.name === 'The Big Drop');
+      const T = Level.tileSize;
+      const cruise = (col, row) => {
+        play(i); cleanInput();
+        Player.spawn(col * T, row * T, 0.01); Player.respawning = false;
+        Object.assign(Player, { vx: Player.runSpeed, runState: 'cruise', rampT: 1 });
+      };
+      const feetRow = () => (Player.y + Player.h) / T;
+      // Run until the first landing after a trampoline bounce (pressing at the bounce if asked).
+      const afterBounce = (press) => {
+        let bounced = false;
+        for (let f = 0; f < 600; f++) {
+          step(Engine.fixedDt);
+          if (Player.dead) return 'died';
+          if (!bounced && Player.grounded && Player.trampDrop > 0) { bounced = true; if (press) Input.tapKey('Space'); continue; }
+          if (bounced && Player.grounded && Player.vy >= 0) return feetRow();
+        }
+        return 'timeout';
+      };
+      cruise(8, 7);
+      const fallJ1 = afterBounce(false);
+      assert(fallJ1 === 12, `falling short at jump 1 should bounce him onto the boardwalk (row 12), got ${fallJ1}`);
+      cruise(8, 7);
+      const pumpJ1 = afterBounce(true);
+      assert(pumpJ1 === 4, `a pumped bounce at jump 1 should reach the zip line (row 4), got ${pumpJ1}`);
+      cruise(82, 14);
+      const fallJ3 = afterBounce(false);
+      assert(fallJ3 === 18, `falling into jump 3's pit should bounce him onto ledge 3 (row 18), got ${fallJ3}`);
+
+      // The whole shortcut: pump at jump 1, zip, drop to the final plateau, press on the big ramp.
+      cruise(8, 7);
+      let pumped = false, pressed = false, plateau = null, made = false;
+      for (let f = 0; f < 120 * 30 && !made && !Player.dead; f++) {
+        if (!pumped && Player.grounded && Player.trampDrop > 0) { Input.tapKey('Space'); pumped = true; }
+        if (!plateau && Player.grounded && Math.abs(feetRow() - 20) < 0.05) plateau = Player.x / T;
+        if (!pressed && Player.grounded && Player.x > 158 * T) { Input.tapKey('Space'); pressed = true; }
+        step(Engine.fixedDt);
+        made = Game.state === 'tentFinale' || Game.state === 'levelComplete';
+      }
+      const shortcutTime = Game.levelTimer;
+      assert(plateau !== null && plateau < 145, `the zip line should drop him on the final plateau (cols 124-145), landed at ${plateau && plateau.toFixed(1)}`);
+      assert(made, `the shortcut should end in the tent (dead ${Player.dead})`);
+
+      // Jump 4: pass ledge 3's flag, fall in pit D, come back at ledge 3.
+      cruise(90, 17);
+      for (let f = 0; f < 600 && !Player.dead; f++) step(Engine.fixedDt);          // rolls off ledge 3 into pit D
+      assert(Player.dead, 'rolling off ledge 3 with no jump should fall into pit D');
+      for (let f = 0; f < 120 && Player.dead; f++) step(Engine.fixedDt);
+      assert(Math.abs(Player.x - 92 * T) < T && Math.abs(feetRow() - 18) < 1.5, `a fall at jump 4 should respawn at ledge 3's checkpoint (col 92), got col ${(Player.x / T).toFixed(1)}, row ${feetRow().toFixed(1)}`);
+      return `short at J1 → boardwalk; pumped → zip line; J3 net → ledge 3; shortcut to the tent in ${shortcutTime.toFixed(1)}s; J4 fall → back at J4`;
+    },
     // ── checks added by later tasks go here, in task order ──
   };
 
   window.runChecks = async function (names) {
     if (!window.playLevel) await fetch('/verify/play.js').then(r => r.text()).then(eval);
+    if (!window.solveLevel) await fetch('/verify/solve.js').then(r => r.text()).then(eval);
     // splashHandoff needs the untouched splash, so it always runs first.
     const list = (names || Object.keys(CHECKS)).slice()
       .sort((a, b) => (b === 'splashHandoff') - (a === 'splashHandoff'));
