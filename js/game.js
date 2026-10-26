@@ -15,13 +15,20 @@ const Game = {
   totalDeaths: 0,
   totalGems: 0,
 
-  // Save data
+  // Save data, one record per level NAME, so levels can be added, merged and
+  // reordered without scrambling anyone's progress. A level you've retired
+  // keeps its record; it just isn't shown.
   save: {
-    levelsComplete: [],     // boolean per level
-    bestDeaths: [],         // best (lowest) death count per level
-    gemsCollected: [],      // gems collected per level (count)
-    totalGemsPerLevel: [],  // total possible per level
+    version: 2,
+    levels: {},             // name -> { complete, bestDeaths (-1 = none), gems, totalGems }
   },
+
+  // The order levels sat in when saves were plain arrays by position (v0.4–v0.6
+  // live, then dev). Frozen here: Level.maps will keep changing, and the old
+  // arrays only make sense against the order that wrote them. v0.1–v0.3 had a
+  // different second and third level, but v0.4 already reused those slots, so
+  // reading them as Catwalk / Big Drop keeps what players see today.
+  legacyOrder: ['The Big Top', 'The Catwalk', 'The Big Drop', 'The Carousel', 'The Duck River', 'The Strongman'],
 
   init() {
     Engine.init();
@@ -64,22 +71,47 @@ const Game = {
 
   // ── Save / Load ──
   loadSave() {
+    this.save = { version: 2, levels: {} };
+    let data = null;
     try {
       const raw = localStorage.getItem('clowncity_save');
-      if (raw) {
-        const data = JSON.parse(raw);
-        // Only merge valid arrays
-        if (Array.isArray(data.levelsComplete)) this.save.levelsComplete = data.levelsComplete;
-        if (Array.isArray(data.bestDeaths)) this.save.bestDeaths = data.bestDeaths;
-        if (Array.isArray(data.gemsCollected)) this.save.gemsCollected = data.gemsCollected;
-        if (Array.isArray(data.totalGemsPerLevel)) this.save.totalGemsPerLevel = data.totalGemsPerLevel;
-      }
+      if (raw) data = JSON.parse(raw);
     } catch (e) { /* ignore corrupt saves */ }
-    // Ensure arrays are properly sized
-    while (this.save.levelsComplete.length < this.totalLevels) this.save.levelsComplete.push(false);
-    while (this.save.bestDeaths.length < this.totalLevels) this.save.bestDeaths.push(-1);
-    while (this.save.gemsCollected.length < this.totalLevels) this.save.gemsCollected.push(0);
-    while (this.save.totalGemsPerLevel.length < this.totalLevels) this.save.totalGemsPerLevel.push(0);
+    if (!data || typeof data !== 'object') return;
+    if (data.levels && typeof data.levels === 'object') {
+      for (const [name, r] of Object.entries(data.levels)) this.save.levels[name] = this._cleanRecord(r);
+    } else if (Array.isArray(data.levelsComplete)) {
+      // Old format: arrays by position. Move them onto names once; writeSave
+      // then stores the new format.
+      this.legacyOrder.forEach((name, i) => {
+        if (i >= data.levelsComplete.length) return;
+        this.save.levels[name] = this._cleanRecord({
+          complete: data.levelsComplete[i],
+          bestDeaths: (data.bestDeaths || [])[i],
+          gems: (data.gemsCollected || [])[i],
+          totalGems: (data.totalGemsPerLevel || [])[i],
+        });
+      });
+      this.writeSave();
+    }
+  },
+
+  _cleanRecord(r) {
+    r = r || {};
+    const num = (v, d) => (Number.isFinite(v) ? v : d);
+    return { complete: r.complete === true, bestDeaths: num(r.bestDeaths, -1), gems: num(r.gems, 0), totalGems: num(r.totalGems, 0) };
+  },
+
+  // The save record for level i (by its name), created on first use.
+  levelRecord(i) {
+    const name = Level.maps[i].name;
+    return this.save.levels[name] || (this.save.levels[name] = this._cleanRecord());
+  },
+
+  // Playable: the first level, the one after a level you've beaten, or one
+  // you've beaten yourself (adding a level ahead of it never locks it again).
+  levelUnlocked(i) {
+    return i === 0 || this.levelRecord(i - 1).complete || this.levelRecord(i).complete;
   },
 
   writeSave() {
@@ -110,7 +142,7 @@ const Game = {
     this.levelTimer = 0;
     Camera.snapToPlayer();
     // Store total collectibles for save data
-    this.save.totalGemsPerLevel[index] = Level.totalCollectibles;
+    this.levelRecord(index).totalGems = Level.totalCollectibles;
   },
 
   update(dt) {
@@ -167,8 +199,7 @@ const Game = {
       this._selectedLevel = Math.max(this._selectedLevel - 1, 0);
       Audio.uiSelect();
     }
-    // Check if level is accessible (previous level complete, or it's level 0)
-    const accessible = this._selectedLevel === 0 || this.save.levelsComplete[this._selectedLevel - 1];
+    const accessible = this.levelUnlocked(this._selectedLevel);
 
     // Select (confirm key or a tap)
     if ((Input.pressed('Space') || Input.pressed('Enter') || Input.pressed('KeyZ') || Input.tapped()) && accessible) {
@@ -257,15 +288,10 @@ const Game = {
         // Save progress
         this.totalDeaths += Player.deathCount;
         this.totalGems += Level.collectedCount;
-        this.save.levelsComplete[this.currentLevel] = true;
-        const bd = this.save.bestDeaths[this.currentLevel];
-        if (bd === -1 || Player.deathCount < bd) {
-          this.save.bestDeaths[this.currentLevel] = Player.deathCount;
-        }
-        const prevGems = this.save.gemsCollected[this.currentLevel];
-        if (Level.collectedCount > prevGems) {
-          this.save.gemsCollected[this.currentLevel] = Level.collectedCount;
-        }
+        const rec = this.levelRecord(this.currentLevel);
+        rec.complete = true;
+        if (rec.bestDeaths === -1 || Player.deathCount < rec.bestDeaths) rec.bestDeaths = Player.deathCount;
+        rec.gems = Math.max(rec.gems, Level.collectedCount);
         this.writeSave();
 
         if (Level.maps[this.currentLevel].tent) {
@@ -503,8 +529,9 @@ const Game = {
       const x = startX + (i % perRow) * (cardW + gap);
       const cardY = firstY + Math.floor(i / perRow) * (cardH + rowGap);
       const selected = i === this._selectedLevel;
-      const accessible = i === 0 || this.save.levelsComplete[i - 1];
-      const complete = this.save.levelsComplete[i];
+      const rec = this.levelRecord(i);
+      const accessible = this.levelUnlocked(i);
+      const complete = rec.complete;
       const theme = Level.themes[Level.maps[i].theme];
 
       // Card background
@@ -548,13 +575,13 @@ const Game = {
         ctx.fillStyle = Tokens.rgba(Tokens.color.success, 0.6);
         ctx.font = Tokens.font.xs;
         ctx.fillText('COMPLETE', x + cardW / 2, cardY + 80);
-        const bd = this.save.bestDeaths[i];
+        const bd = rec.bestDeaths;
         if (bd >= 0) {
           ctx.fillStyle = Tokens.rgba(Tokens.color.dust, 0.5);
           ctx.fillText(`best: ${bd} deaths`, x + cardW / 2, cardY + 98);
         }
-        const gc = this.save.gemsCollected[i];
-        const tc = this.save.totalGemsPerLevel[i];
+        const gc = rec.gems;
+        const tc = rec.totalGems;
         if (tc > 0) {
           ctx.fillText(`gems: ${gc} / ${tc}`, x + cardW / 2, cardY + 114);
         }

@@ -101,6 +101,9 @@ in a browser to run; deployed live at clowncity.russelldangerr.com (main → Clo
 - `js/game.js` — state machine (title/levelSelect/playing/levelComplete/paused/win/tentFinale),
   HUD/menus. `title` is only the boot state under the marquee splash (nothing returns to
   it; the win screen goes back to level select). Level count is dynamic: `Game.totalLevels = Level.maps.length` — don't hardcode.
+  **Saves are keyed by level NAME** (`Game.save.levels[name]`, via `levelRecord(i)` / `levelUnlocked(i)`), so
+  levels can be added, merged or reordered; renaming a level orphans its progress. Old array saves migrate
+  once through the frozen `Game.legacyOrder` (never edit it). A beaten level never relocks.
   `tent: true` on a `Level.maps` entry triggers the tent set-piece + `tentFinale` win state
   (derived from `_cachedGoals[0]`).
 - `js/camera.js` — follow + lookahead keyed to `travelDir`.

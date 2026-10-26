@@ -333,7 +333,7 @@
       assert(Tokens.font.lock, 'Tokens.font.lock missing');
       Engine.ctx.font = Tokens.font.lock;
       const want = Engine.ctx.font;                       // canvas-normalised form
-      Game.save.levelsComplete = [false, false, false];
+      Game.save.levels = {};                              // nothing beaten: every level after the first is locked
       Game.state = 'levelSelect';
       const locked = drawTexts().find(t => t.text === 'LOCKED');
       assert(locked && locked.font === want, `LOCKED should use Tokens.font.lock (got ${locked && locked.font})`);
@@ -774,6 +774,42 @@
       for (let f = 0; f < 120 && !Player.finished; f++) step(Engine.fixedDt);
       assert(!Player.finished, 'the exit opened before the bell rang');
       return `straight drop from x ${grabX.toFixed(0)}, full drop puck → ${fullTop.toFixed(0)} (bell ${sm.bellBottom}), short drop → ${sm2.puckTop.toFixed(0)}, no ring; camera reached y ${camTop.toFixed(0)}; exit locked till the ding`;
+    },
+    // Saves are keyed by level name. An old save (arrays by position, as v0.4–v0.6
+    // write it) moves onto names once and is rewritten in the new format; a
+    // beaten level never locks again even if a level is put ahead of it; junk
+    // and corrupt saves load as empty.
+    async saveMigration() {
+      const load = (raw) => {
+        if (raw == null) localStorage.removeItem('clowncity_save'); else localStorage.setItem('clowncity_save', raw);
+        Game.loadSave();
+      };
+      // 1) A live-site save: Big Top and Catwalk beaten, Big Drop not.
+      load(JSON.stringify({ levelsComplete: [true, true, false], bestDeaths: [2, 5, -1], gemsCollected: [7, 4, 0], totalGemsPerLevel: [9, 7, 2] }));
+      const L = Game.save.levels;
+      assert(L['The Big Top'].complete && L['The Big Top'].bestDeaths === 2 && L['The Big Top'].gems === 7 && L['The Big Top'].totalGems === 9, `Big Top migrated wrong: ${JSON.stringify(L['The Big Top'])}`);
+      assert(L['The Catwalk'].complete && L['The Catwalk'].bestDeaths === 5 && L['The Catwalk'].gems === 4, `Catwalk migrated wrong: ${JSON.stringify(L['The Catwalk'])}`);
+      assert(!L['The Big Drop'].complete && L['The Big Drop'].bestDeaths === -1, `Big Drop migrated wrong: ${JSON.stringify(L['The Big Drop'])}`);
+      const written = JSON.parse(localStorage.getItem('clowncity_save'));
+      assert(written.version === 2 && written.levels && !written.levelsComplete, 'the migrated save should be rewritten in the new format');
+      const idx = (name) => Level.maps.findIndex(m => m.name === name);
+      assert(Game.levelUnlocked(idx('The Big Drop')), 'the level after two beaten ones should be unlocked');
+      assert(!Game.levelUnlocked(idx('The Carousel')), 'the Carousel should be locked until the Big Drop is beaten');
+
+      // 2) The new format round-trips, and a beaten level stays open with its predecessor unbeaten.
+      load(JSON.stringify({ version: 2, levels: { 'The Strongman': { complete: true, bestDeaths: 0, gems: 12, totalGems: 12 } } }));
+      assert(Game.save.levels['The Strongman'].gems === 12, 'a v2 save should load as written');
+      assert(Game.levelUnlocked(idx('The Strongman')), 'a beaten level should never lock, even with the one before it unbeaten');
+      assert(!Game.levelUnlocked(idx('The Duck River')), 'an unbeaten level behind an unbeaten one should stay locked');
+
+      // 3) Junk: corrupt JSON, wrong types, and no save at all all load as empty.
+      for (const raw of ['{not json', JSON.stringify({ levelsComplete: 'yes', levels: 3 }), JSON.stringify(null), null]) {
+        load(raw);
+        assert(Object.keys(Game.save.levels).length === 0 && Game.levelUnlocked(0) && !Game.levelUnlocked(1), `junk save ${String(raw).slice(0, 20)} should load as empty`);
+      }
+      load(JSON.stringify({ version: 2, levels: { 'The Big Top': { complete: 'yes', bestDeaths: 'x' } } }));
+      assert(Game.save.levels['The Big Top'].complete === false && Game.save.levels['The Big Top'].bestDeaths === -1, 'bad fields in a record should fall back to defaults');
+      return 'old position arrays → names (Big Top 2 deaths/7 gems, Catwalk, Big Drop), rewritten as v2; beaten levels never relock; junk loads empty';
     },
     // ── checks added by later tasks go here, in task order ──
   };
