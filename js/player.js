@@ -42,6 +42,8 @@ const Player = {
   boostSpeed: 680,          // px/s — a boost belt drives Poko up to this (1.7x cruise)
   boostAccel: 1600,         // px/s^2 — how hard the belt pushes (cruise → boost in ~0.18s)
   respawnRampTime: 0.4,     // s — standstill → cruise after a respawn (startRampTime is the level start)
+  deckGrip: 1200,           // px/s^2 — how fast Poko's carry matches a moving surface (deck → full carry in ~0.13s)
+  duckBounce: 260,          // px/s — a rubber duck squeaks Poko back up (a press as he lands adds rampJumpPop: 540)
   brakeWindow: 0.18,        // max lifetime of the wheel-throw attack hitbox
 
   // ── Spin-out attack (tap your CURRENT direction with momentum) ──
@@ -176,6 +178,8 @@ const Player = {
   checkpointX: 0,
   checkpointY: 0,
   finished: false,          // reached the goal: coasting to a stop, input ignored
+  hauling: false,           // holding the Strongman's hammer: wheel locked, input ignored, drops straight down
+  airTop: 0,                // highest point (min y) since last on the ground: a landing's drop height is y − airTop
   hidden: false,            // swallowed by the tent (Big Drop finale): not drawn or updated
 
   // ── Hazard hitbox (smaller than platform hitbox for forgiving near-misses) ──
@@ -183,6 +187,15 @@ const Player = {
 
   // ── Material state ──
   groundMaterial: 'solid',   // material of tile player is standing on
+
+  // ── Moving ground (the Carousel deck and its horses) ──
+  // vx is the wheel's speed over whatever it rolls on; carry is how fast that
+  // surface is moving, so Poko's real speed is vx + carry. The drive, the
+  // momentum gauge and the attacks all keep working on vx alone. Carry grips
+  // toward the surface's speed while grounded and is kept in the air, so a
+  // jump off the deck flies at deck speed too.
+  carry: 0,
+  surfaceSpeed: 0,           // speed of the surface under the feet (set in resolveCollisions)
 
   // ── Particle timers ──
   _dustTimer: 0,
@@ -210,6 +223,8 @@ const Player = {
     this.rampTime = rampTime || this.startRampTime;
     this.vx = 0;
     this.vy = 0;
+    this.carry = 0;
+    this.surfaceSpeed = 0;
     this.grounded = false;
     this.wasGrounded = false;
     this.coyoteTimer = 0;
@@ -245,6 +260,8 @@ const Player = {
     this.leanTarget = 0;
     this.dead = false;
     this.finished = false;
+    this.hauling = false;
+    this.airTop = y;
     this.hidden = false;
     this.deathTimer = 0;
     this.respawning = true;
@@ -294,7 +311,8 @@ const Player = {
     this.vx = approach(this.vx, 0, this.reverseDecel * dt);
     const grav = this.vy < 0 ? this.gravityUp : this.gravityDown;
     this.vy = Math.min(this.vy + grav * dt, this.maxFallSpeed);
-    this.x += this.vx * dt;
+    this.carry = approach(this.carry, 0, this.deckGrip * dt);
+    this.x += (this.vx + this.carry) * dt;
     this.y += this.vy * dt;
     this.resolveCollisions();
     this.wheelAngle += (this.vx / this.wheelRadius) * dt;
@@ -304,6 +322,25 @@ const Player = {
       this.trail[i].alpha -= dt * 2;
       if (this.trail[i].alpha <= 0) this.trail.splice(i, 1);
     }
+    this.updateAnim(dt);
+  },
+
+  // Holding the hammer: it's too heavy to pedal, so the wheel locks and Poko
+  // drops straight down under gravity. airTop keeps tracking the top of the
+  // fall until he lands, so whatever reads the landing gets the full drop.
+  _haul(dt) {
+    this.wasGrounded = this.grounded;
+    this.vx = 0;
+    this.carry = 0;
+    const grav = this.vy < 0 ? this.gravityUp : this.gravityDown;
+    this.vy = Math.min(this.vy + grav * dt, this.maxFallSpeed);
+    this.y += this.vy * dt;
+    this.resolveCollisions();
+    if (!this.grounded) this.airTop = Math.min(this.airTop, this.y);
+    this.lean += (0 - this.lean) * this.leanRate * dt;
+    this.squash += (this.squashTarget - this.squash) * 14 * dt;
+    this.squashTarget = 1;
+    this.setAnim(this.grounded ? 'run' : this.vy < 0 ? 'jump' : 'fall');
     this.updateAnim(dt);
   },
 
@@ -352,6 +389,12 @@ const Player = {
     // ── Finished: the goal was reached ──
     if (this.finished) {
       if (!this.hidden) this._coast(dt);
+      return;
+    }
+
+    // ── Hauling the hammer: the Strongman entity grabs and releases ──
+    if (this.hauling) {
+      this._haul(dt);
       return;
     }
 
@@ -472,7 +515,9 @@ const Player = {
       this.coyoteTimer = this.coyoteTime;
       this.lipGraceTimer = 0;
       this.groundY = this.y;                 // takeoff height, for a landing's payout
+      this.airTop = this.y;
     } else {
+      this.airTop = Math.min(this.airTop, this.y);
       this.coyoteTimer -= dt;
       if (this.lipGraceTimer > 0) this.lipGraceTimer -= dt;
     }
@@ -554,11 +599,14 @@ const Player = {
     const prevWallDir = this.wallDir;            // wall contact from LAST frame
     const prevRamp = this.ramp;                  // ramp ridden LAST frame
     const speedAtContact = Math.abs(this.vx);    // speed we may slam a wall with this frame
-    this.x += this.vx * dt;
+    if (this.grounded) this.carry = approach(this.carry, this.surfaceSpeed, this.deckGrip * dt);
+    this.x += (this.vx + this.carry) * dt;
     this.y += this.vy * dt;
 
     // ── Resolve collisions (with corner correction) ──
     this.resolveCollisions();
+    // A wall stops Poko outright in the air: the carry goes with vx.
+    if (!this.grounded && this.wallDir !== 0) this.carry = 0;
 
     // Flew off a launcher's lip without jumping (coyote untouched): a press in the
     // next lipGrace seconds still adds the pop — being a beat late isn't a miss.
@@ -771,6 +819,7 @@ const Player = {
     this.grounded = false;
     this.wallDir = 0;
     this.groundMaterial = 'solid';
+    this.surfaceSpeed = 0;
 
     const tiles = Level.getTilesNear(this.x, this.y, this.w, this.h);
 
@@ -818,6 +867,7 @@ const Player = {
         if (pushDir === -1) {
           // Track ground material (drives the treadmill speed cap)
           this.groundMaterial = tile.material || 'solid';
+          this.surfaceSpeed = this.groundMaterial === 'deck' ? Level.deckSpeed : 0;
 
           // Landed
           if (this.vy > 200) {
@@ -879,6 +929,8 @@ const Player = {
               this.y = tile.y - this.h;
               this.grounded = true;
               this.vy = 0;
+              this.groundMaterial = tile.material || 'solid';
+              this.surfaceSpeed = this.groundMaterial === 'deck' ? Level.deckSpeed : 0;
               break;
             }
           }
@@ -923,10 +975,24 @@ const Player = {
       // Only collide if player's feet are near the top of the platform and falling
       const footY = this.y + this.h;
       const prevFootY = footY - this.vy * Engine.fixedDt;
-      if (this.vy >= 0 && footY >= rect.y && prevFootY <= rect.y + 6) {
+      // A top that drops away (a horse on the way down) falls faster than gravity
+      // catches Poko up on the first frame; reaching down by its drop keeps him seated.
+      const reach = rect.dy > 0 ? rect.dy + 1 : 0;
+      if (this.vy >= 0 && footY >= rect.y - reach && prevFootY <= rect.y + 6) {
         this.y = rect.y - this.h;
         this.grounded = true;
         this.vy = 0;
+        this.surfaceSpeed = rect.carry || 0;
+        if (rect.bounce) {
+          // A rubber duck: Poko only touches it for this frame, squeaking straight
+          // back up, so he takes the current at once rather than gripping into it.
+          // Grounded stays true, so a jump pressed as he lands (buffer) or just
+          // after (coyote) pops on top of the bounce (see _doGroundJump).
+          this.vy = -this.duckBounce;
+          this.carry = this.surfaceSpeed;
+          this.squash = 0.7;
+          Audio.bounce();
+        }
       }
     }
 
@@ -974,6 +1040,7 @@ const Player = {
       this.vy = this.vx * bestSlope;        // move along the surface (see update)
       this.grounded = true;
       this.groundMaterial = 'solid';
+      this.surfaceSpeed = 0;
       this.onSlope = true;
       this.surfaceSlope = bestSlope;
       this.ramp = bestRamp;
@@ -1048,6 +1115,15 @@ const Player = {
     if (this.dead || this.respawning) return;
 
     const attack = this.getAttackRect();
+
+    // Gallery targets: the spray or the lunge knocks them down. Touching is harmless.
+    for (const e of Entities.list) {
+      const t = e.getTargetRect && e.getTargetRect();
+      if (!t) continue;
+      const r = Level.near(t);
+      if (this._sprayHits(r) || (attack && aabb(attack, r))) e.knock();
+    }
+
     const px = this.x + this.hazardShrink;
     const py = this.y + this.hazardShrink;
     const pw = this.w - this.hazardShrink * 2;
@@ -1059,7 +1135,7 @@ const Player = {
     for (let i = Entities.list.length - 1; i >= 0; i--) {
       const e = Entities.list[i];
       if (!e.getHazardRect || e.dead) continue;
-      const r = e.getHazardRect();
+      const r = Level.near(e.getHazardRect());
 
       // (0) Lethal carnival spray — the confetti itself kills what it lands on.
       if (this._sprayHits(r)) { Entities.kill(e); continue; }
@@ -1082,8 +1158,13 @@ const Player = {
     }
 
     // Static tile hazards (none on a lean track, but kept for safety/future).
-    for (const haz of Level.getHazards()) {
-      if (aabb(body, haz)) { this.die(); return; }
+    for (const h of Level.getHazards()) {
+      const haz = Level.near(h);
+      if (aabb(body, haz)) {
+        if (haz.water) Particles.burst(this.x + this.w / 2, haz.y, 16, 180, Tokens.rgba(Tokens.color.foam, 0.8), 0.45);
+        this.die();
+        return;
+      }
     }
   },
 

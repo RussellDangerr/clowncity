@@ -12,8 +12,16 @@ const Level = {
   // c = checkpoint, o = collectible (gem)
   // T = treadmill (caps Poko's speed at 0.5 and bleeds momentum)
   // B = boost belt (drives Poko up to Player.boostSpeed whichever way he rolls)
+  // D = carousel deck (carries Poko at the map's deckSpeed, see Player.carry)
+  // r = brass ring (grab them all to unlock the goal)
+  // w = water (lethal; the surface sits a little below the cell top)
+  // u = raised drawbridge (a wall until the gallery's tin ducks are all down)
+  // n = lowered drawbridge (empty until then, solid planks after)
   // / = slope rising to the right, \ = slope rising to the left (45°)
   //     (authoring: a literal backslash must be written \\ inside the JS strings)
+  // A map with `wrap: true` is a loop: running off one end comes back on the
+  // other, so it has no edge walls. Positions stay unbounded (Poko's x keeps
+  // growing lap after lap) and every lookup folds them back onto the map (near).
   // Curved ramps live beside the grid, in a map's `ramps` list (see rampY):
   //   ramps: [{ points: [[tileX, tileY, slope], ...] }]   — leave their cells '0'.
 
@@ -22,6 +30,8 @@ const Level = {
     solid:     { color: null },
     treadmill: { color: Tokens.color.treadmill },
     boost:     { color: Tokens.color.boost },
+    deck:      { color: Tokens.color.deck },
+    plank:     { color: Tokens.color.plank },
   },
   // Theme palettes used by draw()
   themes: {
@@ -48,6 +58,30 @@ const Level = {
       accent: 'rgba(255, 215, 120, 0.14)',
       goalColor: [255, 215, 120],
       dotColor: 'rgba(120, 150, 230, 0.06)',
+    },
+    carousel: {
+      name: 'The Carousel',
+      bg: ['#06161a', '#0a2026', '#14202e'],
+      tile: ['#2e1828', '#3c2034', '#552c48'],
+      accent: 'rgba(255, 205, 70, 0.14)',
+      goalColor: [255, 205, 70],
+      dotColor: 'rgba(255, 205, 70, 0.05)',
+    },
+    pond: {
+      name: 'The Duck River',
+      bg: ['#06121a', '#0a1c24', '#0e2430'],
+      tile: ['#1b3320', '#25472c', '#3a6a42'],
+      accent: 'rgba(255, 220, 90, 0.14)',
+      goalColor: [255, 220, 90],
+      dotColor: 'rgba(255, 220, 90, 0.05)',
+    },
+    strongman: {
+      name: 'The Strongman',
+      bg: ['#0c0814', '#140c22', '#1e1030'],
+      tile: ['#1e2240', '#2a305a', '#3d4680'],
+      accent: 'rgba(255, 215, 100, 0.14)',
+      goalColor: [255, 215, 100],
+      dotColor: 'rgba(200, 180, 255, 0.05)',
     }
   },
 
@@ -211,6 +245,189 @@ const Level = {
         '11111111111111111111111111111111111111110000000000000000111111111111111111111111111111111111111111111111',
         '11111111111111111111111111111111111111110000000000000000111111111111111111111111111111111111111111111111',
       ]
+    },
+    {
+      name: 'The Carousel',
+      theme: 'carousel',
+      spawn: [3, 21],
+      wrap: true,                    // a loop: no edge walls, the far end runs into the start
+      bot: false,                    // the pit-jumping bot can't chase rings: see the carousel check
+      deckSpeed: 160,                // px/s the deck carries Poko (+ = the way he starts)
+      entities: [
+        // Eight horses ride the deck around the loop, bobbing out of step.
+        ...Array.from({ length: 8 }, (_, i) => ({
+          type: 'horse', x: i * 15 * 32 + 5 * 32, y: 20 * 32, w: 80, amp: 80, period: 2.4, phase: i * Math.PI / 2, floorY: 22 * 32,
+        })),
+        // Patrols on the deck (they walk on the deck's boards; the spin doesn't move them).
+        { type: 'patrol', x: 44 * 32, y: 22 * 32 - 20, range: 64, speed: 55 },
+        { type: 'patrol', x: 104 * 32, y: 22 * 32 - 20, range: 64, speed: 55 },
+        // The ticket booth's roof: only a horse near the top of its bob reaches it.
+        { type: 'oneway', x: 88 * 32, y: 16 * 32, w: 7 * 32 },
+      ],
+      // 120 wide x 25 tall, and it wraps. The deck spins the way Poko starts, so
+      // riding with it is fast (cruise + deckSpeed) and turning back is a grind.
+      // Three brass rings, each a step higher, unlock the exit gate (col 112):
+      //   A (col 20)  low: a jump from the deck.
+      //   B (col 58)  a jump from any horse but the lowest of its bob.
+      //   C (col 98)  off the booth roof, which a horse near its peak reaches.
+      // Gaps at cols 30-33 (a hop either way) and 70-77 (a jump only clears it
+      // riding with the spin). Miss a ring: go round again, or turn back for it.
+      data: [
+        '000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
+        '000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
+        '000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
+        '000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
+        '000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
+        '000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
+        '000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
+        '000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
+        '000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
+        '000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
+        '000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
+        '000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
+        '00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000r000000000000000000000',
+        '000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
+        '000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
+        '0000000000000000000000000000000000000000000000000000000000r00000000000000000000000000000000o0000000000000000000000000000',
+        '000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
+        '000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
+        '00000000000000000000r000000000000000000000000000000000000000000000000000000o00000000000000000000000000000000000000000000',
+        '0000000000000000000000000000000oo000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
+        '000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000',
+        '0000000000o00000000000000000000000000000c000000000o00000000000000o0000000000000000c00000000000000000000000o00000g000o000',
+        'DDDDDDDDDDDDDDDDDDDDDDDDDDDDDD0000DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD00000000DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD',
+        '111111111111111111111111111111000011111111111111111111111111111111111100000000111111111111111111111111111111111111111111',
+        '111111111111111111111111111111000011111111111111111111111111111111111100000000111111111111111111111111111111111111111111',
+      ]
+    },
+    {
+      name: 'The Duck River',
+      theme: 'pond',
+      spawn: [3, 21],
+      bot: false,                    // the pit-jumping bot can't read duck rhythm or aim: see the duckRiver check
+      entities: [
+        // Rubber ducks float downstream (+x) at the current's speed. `gaps` is the
+        // spacing between ducks, which never changes as they drift: an unpressed
+        // squeak hop carries Poko ~143 px over a duck, one pressed as he lands ~297
+        // (a late press ~264: the 64px ducks absorb it).
+        { type: 'ducks', x0: 14 * 32, x1: 26 * 32, y: 22 * 32 - 2, speed: 120, gaps: [192] },
+        { type: 'ducks', x0: 42 * 32, x1: 74 * 32, y: 22 * 32 - 2, speed: 120, gaps: [144, 144, 296] },
+        { type: 'ducks', x0: 80 * 32, x1: 112 * 32, y: 22 * 32 - 2, speed: 120, gaps: [144, 296] },
+        { type: 'patrol', x: 34 * 32, y: 22 * 32 - 20, range: 64, speed: 55 },
+        // The shooting gallery: five tin ducks on a rail over the pen. Knock them
+        // all down (spray / lunge) and the drawbridge drops.
+        ...Array.from({ length: 5 }, (_, i) => ({
+          type: 'tinduck', x0: 120 * 32, x1: 136 * 32, y: 18 * 32, speed: 60, offset: i * 16 * 32 / 5,
+        })),
+        { type: 'patrol', x: 164 * 32, y: 22 * 32 - 20, range: 64, speed: 55 },
+      ],
+      // 176 wide x 25 tall, flowing left to right. Water (w) is lethal; the ducks
+      // in it bounce. Bank -> creek (cols 14-25, one duck hop) -> bank, patrol ->
+      // river (cols 42-73): hop, hop, BIG -> island checkpoint (74-79) -> river
+      // (80-111): hop, BIG, faster -> the gallery pen (cols 119-136) between a
+      // 2-tall counter (col 118) and the raised drawbridge (u, col 137): turn back
+      // and forth spraying the tin ducks -> the bridge lowers (n, row 22, cols
+      // 138-157) over the lock -> goal (col 171).
+      data: [
+        '10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001',
+        '10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001',
+        '10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001',
+        '10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001',
+        '10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001',
+        '10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001',
+        '10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001',
+        '10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001',
+        '10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001',
+        '10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001',
+        '10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001',
+        '10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001',
+        '10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001',
+        '10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001',
+        '10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000u00000000000000000000000000000000000001',
+        '10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000u00000000000000000000000000000000000001',
+        '10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000u00000000000000000000000000000000000001',
+        '10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000u00000000000000000000000000000000000001',
+        '10000000000000000000o00000000000000000000000000000o00000000000o000000000000000000000000000o000000000o000000000000000000000000000000000000u00000000000000000000000000000000000001',
+        '10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000u00000000000000000000000000000000000001',
+        '10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000000000000000000u00000000000000000000000000000000000001',
+        '1000000000000000000000000000c0o000000000000000000000000000000000000000000000co000000000000000000000000000000000000c00010000000o0000000000u000000000o000000000000c00000o0000g0001',
+        '11111111111111wwwwwwwwwwww1111111111111111wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww111111wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww11111111111111111111111111nnnnnnnnnnnnnnnnnnnn111111111111111111',
+        '11111111111111wwwwwwwwwwww1111111111111111wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww111111wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww11111111111111111111111111wwwwwwwwwwwwwwwwwwww111111111111111111',
+        '11111111111111wwwwwwwwwwww1111111111111111wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww111111wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww11111111111111111111111111wwwwwwwwwwwwwwwwwwww111111111111111111',
+      ]
+    },
+    {
+      name: 'The Strongman',
+      theme: 'strongman',
+      spawn: [3, 41],
+      entities: [
+        { type: 'patrol', x: 4 * 32, y: 32 * 32 - 20, range: 64, speed: 55 },   // F1, past its gap
+        { type: 'patrol', x: 8 * 32, y: 12 * 32 - 20, range: 64, speed: 55 },   // F3: the shaft-3 exit lands too close for a gap
+        { type: 'patrol', x: 10 * 32, y: 4 * 32 - 20, range: 64, speed: 55 },   // the top, before the hammer
+        // The high striker. The hammer hangs out past the top of the tower; its
+        // grab box starts just past the top floor's edge, so rolling or jumping
+        // off grabs it and Poko drops straight down the column onto the plate.
+        {
+          type: 'strongman',
+          hammerX: 25 * 32, hammerY: 3 * 32,
+          grab: { x: 22 * 32 + 20, y: 0, w: 6 * 32, h: 6 * 32 },
+          plateX0: 22 * 32, plateX1: 25 * 32, groundY: 42 * 32,
+          trackX: 30 * 32 + 16, bellY: 3 * 32,
+        },
+      ],
+      // 48 wide x 45 tall: a tower. Ground (row 42) -> shaft 1 (right, cols 19-20)
+      // -> F1 (row 32) heading left, gap -> shaft 2 (left, cols 1-2) -> F2 (row 22)
+      // heading right, gap (cols 7-9: its landing leaves room before the shaft) -> shaft 3 (right) -> F3 (row 12) heading left, gap ->
+      // shaft 4 (left) -> the top (row 4) heading right -> off the edge onto the
+      // hammer -> down the drop column (col 22) -> the plate rings the bell, which
+      // opens the goal (col 38). A floor gap drops you back a floor, not to death.
+      data: [
+        '100000000000000000000000000000000000000000000001',
+        '100000000000000000000000000000000000000000000001',
+        '100000000000000000000000000000000000000000000001',
+        '100000c000000000o0000000000000000000000000000001',
+        '100111111111111111111100000000000000000000000001',
+        '100100000000000000000100000000000000000000000001',
+        '100100000000000000000100000000000000000000000001',
+        '100100000000000000000100000000000000000000000001',
+        '100100000000000000000100000000000000000000000001',
+        '100100000000o00000000100000000000000000000000001',
+        '1001000000000000000001o0000000000000000000000001',
+        '1000000000000000c0000100000000000000000000000001',
+        '111111111111111111100100000000000000000000000001',
+        '100000000000000000100100000000000000000000000001',
+        '100000000000000000100100000000000000000000000001',
+        '100000000000000000100100000000000000000000000001',
+        '1000000000000000001o01o0000000000000000000000001',
+        '100000000000000000100100000000000000000000000001',
+        '100000000000000000100100000000000000000000000001',
+        '10000000o000000000100100000000000000000000000001',
+        '100000000000000000100100000000000000000000000001',
+        '10000c000000000000000100000000000000000000000001',
+        '1001111000111111111111o0000000000000000000000001',
+        '100100000000000000000100000000000000000000000001',
+        '100100000000000000000100000000000000000000000001',
+        '100100000000000000000100000000000000000000000001',
+        '100100000000000000000100000000000000000000000001',
+        '10o100000000000000000100000000000000000000000001',
+        '1001000000000000000001o0000000000000000000000001',
+        '100100000000000000000100000000000000000000000001',
+        '100100000000000000000100000000000000000000000001',
+        '10000000000000o0c0000100000000000000000000000001',
+        '111111111000111111100100000000000000000000000001',
+        '100000000000000000100100000000000000000000000001',
+        '1000000000000000001001o0000000000000000000000001',
+        '100000000000000000100100000000000000000000000001',
+        '100000000000000000100100000000000000000000000001',
+        '100000000000000000100100000000000000000000000001',
+        '100000000000000000100100000000000000000000000001',
+        '100000000000000000100100000000000000000000000001',
+        '1000000000o0000000100100000000000000000000000001',
+        '10000000000000000000010000000000000000g000000001',
+        '111111111111111111111111111111111111111111111111',
+        '111111111111111111111111111111111111111111111111',
+        '111111111111111111111111111111111111111111111111',
+      ]
     }
   ],
 
@@ -223,15 +440,24 @@ const Level = {
     this.collectibles = [];
     this.collectedCount = 0;
     this.totalCollectibles = 0;
+    this.rings = [];
+    this.ringsCollected = 0;
+    this.bridgeSpan = [];
+    this.bridgeOpen = false;
+    this.needsBell = false;          // set by a Strongman entity as it loads
+    this.bellRung = false;
+    const waterTop = {};             // col -> topmost water row
     const map = this.maps[mapIndex];
     const data = map.data;
+    this.wrap = !!map.wrap;
+    this.deckSpeed = map.deckSpeed || 0;
 
     this.levelHeight = data.length * this.tileSize;
     this.levelWidth = data[0].length * this.tileSize;
     this.spawnX = map.spawn[0] * this.tileSize;
     this.spawnY = map.spawn[1] * this.tileSize;
 
-    const materialMap = { 'T': 'treadmill', 'B': 'boost' };
+    const materialMap = { 'T': 'treadmill', 'B': 'boost', 'D': 'deck', 'u': 'plank' };
 
     for (let row = 0; row < data.length; row++) {
       for (let col = 0; col < data[row].length; col++) {
@@ -242,7 +468,7 @@ const Level = {
         if (ch === '1') {
           this.tiles.push({ x: tx, y: ty, w: this.tileSize, h: this.tileSize, type: 'solid', material: 'solid' });
         } else if (materialMap[ch]) {
-          this.tiles.push({ x: tx, y: ty, w: this.tileSize, h: this.tileSize, type: 'solid', material: materialMap[ch] });
+          this.tiles.push({ x: tx, y: ty, w: this.tileSize, h: this.tileSize, type: 'solid', material: materialMap[ch], bridge: ch === 'u' });
         } else if (ch === '/' || ch === '\\') {
           const slopeDir = ch === '/' ? 1 : -1;
           this.tiles.push({ x: tx, y: ty, w: this.tileSize, h: this.tileSize, type: 'slope', slopeDir });
@@ -253,12 +479,21 @@ const Level = {
         } else if (ch === 'o') {
           this.collectibles.push({ x: tx, y: ty, w: this.tileSize, h: this.tileSize, collected: false });
           this.totalCollectibles++;
+        } else if (ch === 'r') {
+          this.rings.push({ x: tx, y: ty, w: this.tileSize, h: this.tileSize, collected: false });
+        } else if (ch === 'n') {
+          this.bridgeSpan.push({ x: tx, y: ty, w: this.tileSize, h: this.tileSize });
+        } else if (ch === 'w' && !(col in waterTop)) {
+          waterTop[col] = row;
         }
       }
     }
 
-    // No static tile hazards on the lean track — danger is pits + enemies.
-    this._cachedHazards = [];
+    // Static hazards: only water. One rect per column, from the surface down.
+    this._cachedHazards = Object.entries(waterTop).map(([col, row]) => ({
+      x: col * this.tileSize, y: row * this.tileSize + this.waterInset, w: this.tileSize,
+      h: (data.length - row) * this.tileSize - this.waterInset, water: true,
+    }));
     this._cachedGoals = this.tiles.filter(t => t.type === 'goal');
 
     // Build spatial grid for fast tile lookups (getTilesNear)
@@ -313,12 +548,67 @@ const Level = {
 
     // Load dynamic entities
     Entities.loadFromMap(map.entities);
+    // Shooting-gallery targets: knock them all down to lower the drawbridge.
+    this.targetsTotal = Entities.list.filter(e => e.getTargetRect).length;
+    this.targetsHit = 0;
+  },
+
+  waterInset: 10,      // px from a water cell's top down to the surface
+
+  // A tin duck went down. The last one drops the drawbridge.
+  targetHit() {
+    this.targetsHit++;
+    if (this.targetsHit >= this.targetsTotal) this.openBridge();
+  },
+
+  // The raised drawbridge stops being a wall and lies down across the water.
+  openBridge() {
+    if (this.bridgeOpen) return;
+    this.bridgeOpen = true;
+    const s = this.tileSize;
+    for (const t of this.tiles) {
+      if (!t.bridge) continue;
+      delete this._tileGrid[(t.x / s) + ',' + (t.y / s)];
+      this.solidGrid[t.y / s][t.x / s] = false;
+    }
+    this.tiles = this.tiles.filter(t => !t.bridge);
+    for (const r of this.bridgeSpan) {
+      const tile = Object.assign({ type: 'solid', material: 'plank' }, r);
+      this.tiles.push(tile);
+      this._tileGrid[(r.x / s) + ',' + (r.y / s)] = tile;
+      this.solidGrid[r.y / s][r.x / s] = true;
+      Particles.burst(r.x + s / 2, r.y + s / 2, 4, 90, Tokens.rgba(Tokens.color.dust, 0.6), 0.4);
+    }
+    Camera.shake(6);
+    Engine.flash('white', 0.3);
+    Audio.checkpoint();
   },
 
   // Check if grid cell is solid (for edge detection)
   _isSolid(row, col) {
+    if (this.wrap) col = this._wrapCol(col);
     if (row < 0 || row >= this.gridRows || col < 0 || col >= this.gridCols) return false;
     return this.solidGrid[row] && this.solidGrid[row][col];
+  },
+
+  // ── Wrapping (a loop level) ──
+  _wrapCol(col) {
+    return ((col % this.gridCols) + this.gridCols) % this.gridCols;
+  },
+
+  // The copy of rect `r` nearest Poko. On a loop the map repeats every
+  // levelWidth, and Poko's x runs on past it lap after lap, so anything stored
+  // in map space is compared through here. Off a loop it's `r` itself.
+  near(r) {
+    if (!this.wrap) return r;
+    const W = this.levelWidth;
+    const k = Math.round((Player.x + Player.w / 2 - (r.x + r.w / 2)) / W);
+    return k === 0 ? r : Object.assign({}, r, { x: r.x + k * W });
+  },
+
+  // The exit stays shut until every brass ring is grabbed (and the bell rung, on a striker map).
+  get goalLocked() {
+    return this.ringsCollected < this.rings.length || (this.needsBell && !this.bellRung);
   },
 
   getTilesNear(px, py, pw, ph) {
@@ -331,6 +621,14 @@ const Level = {
     const result = [];
     for (let gy = y1; gy <= y2; gy++) {
       for (let gx = x1; gx <= x2; gx++) {
+        if (this.wrap) {
+          // Fold the column onto the map, then move the tile to where it sits
+          // on this lap, so the collision maths sees it beside Poko.
+          const wx = this._wrapCol(gx);
+          const tile = this._tileGrid[wx + ',' + gy];
+          if (tile && !tile.broken) result.push(wx === gx ? tile : Object.assign({}, tile, { x: tile.x + (gx - wx) * s }));
+          continue;
+        }
         const tile = this._tileGrid[gx + ',' + gy];
         if (tile && !tile.broken) result.push(tile);
       }
@@ -403,7 +701,9 @@ const Level = {
 
   // Get material for a tile at a position (O(1) grid lookup)
   getMaterialAt(x, y) {
-    const key = Math.floor(x / this.tileSize) + ',' + Math.floor(y / this.tileSize);
+    let col = Math.floor(x / this.tileSize);
+    if (this.wrap) col = this._wrapCol(col);
+    const key = col + ',' + Math.floor(y / this.tileSize);
     const tile = this._tileGrid[key];
     if (tile && !tile.broken) return tile.material || 'solid';
     return null;
@@ -521,18 +821,74 @@ const Level = {
         ctx.fillStyle = `rgba(180,150,100,${0.06 + Math.sin(t + i * 0.7) * 0.02})`;
         ctx.fillRect(px, py, size, size);
       }
+    } else if (currentTheme === 'carousel') {
+      // The canopy's scalloped valance along the top, turning with the deck:
+      // scallop n sits at world x = n·P + t·deckSpeed, so it keeps pace with the
+      // horses and the deck chevrons.
+      const P = 64, spin = t * this.deckSpeed;
+      ctx.fillStyle = Tokens.rgba(Tokens.color.ring, 0.25);
+      ctx.fillRect(0, 0, Engine.width, 14);
+      for (let n = Math.floor((Camera.x - spin) / P) - 1; n * P + spin - Camera.x < Engine.width + P; n++) {
+        const sx = n * P + spin - Camera.x;
+        ctx.fillStyle = (n & 1) ? Tokens.color.tentCream : Tokens.color.tentRed;
+        ctx.globalAlpha = 0.35;
+        ctx.beginPath();
+        ctx.arc(sx + P / 2, 14, P / 2, 0, Math.PI);
+        ctx.fill();
+        // A bulb at each seam, chasing along the valance.
+        ctx.globalAlpha = 0.5 + 0.4 * Math.sin(t * 6 + n);
+        ctx.fillStyle = Tokens.rgba(Tokens.color.ring, 1);
+        ctx.beginPath();
+        ctx.arc(sx, 16, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    } else if (currentTheme === 'pond') {
+      // Fireflies drifting over the water.
+      for (let i = 0; i < 18; i++) {
+        const px = ((i * 173 + Math.sin(t * 0.4 + i) * 60 - Camera.x * 0.2) % (Engine.width + 40) + Engine.width + 40) % (Engine.width + 40) - 20;
+        const py = (i * 97) % (Engine.height * 0.7) + Math.sin(t * 0.7 + i * 1.3) * 20;
+        ctx.fillStyle = Tokens.rgba(Tokens.color.gold, 0.25 + 0.25 * Math.sin(t * 2 + i * 2.7));
+        ctx.fillRect(px, py, 2, 2);
+      }
+    } else if (currentTheme === 'strongman') {
+      // Two searchlights sweeping up from the midway.
+      for (let i = 0; i < 2; i++) {
+        const bx = Engine.width * (0.25 + 0.5 * i), a = Math.sin(t * 0.4 + i * 2.2) * 0.5;
+        const tx = bx + Math.sin(a) * Engine.height * 1.2;
+        const grad2 = ctx.createLinearGradient(bx, Engine.height, tx, 0);
+        grad2.addColorStop(0, Tokens.rgba(Tokens.color.gold, 0.06));
+        grad2.addColorStop(1, Tokens.rgba(Tokens.color.gold, 0));
+        ctx.fillStyle = grad2;
+        ctx.beginPath();
+        ctx.moveTo(bx - 6, Engine.height);
+        ctx.lineTo(tx - 70, 0);
+        ctx.lineTo(tx + 70, 0);
+        ctx.lineTo(bx + 6, Engine.height);
+        ctx.fill();
+      }
     }
     ctx.restore();
 
     ctx.save();
     ctx.translate(-Camera.drawX, -Camera.drawY);
+    // A loop level draws each copy of the map the view overlaps (two at the seam).
+    const W = this.levelWidth;
+    const k0 = this.wrap ? Math.floor(Camera.x / W) : 0;
+    const k1 = this.wrap ? Math.floor((Camera.x + Engine.width) / W) : 0;
+    for (let k = k0; k <= k1; k++) {
+      ctx.save();
+      ctx.translate(k * W, 0);
+      this._drawWorld(ctx, theme, Camera.x - k * W - 32, Camera.x - k * W + Engine.width + 32,
+        Camera.y - 32, Camera.y + Engine.height + 32);
+      ctx.restore();
+    }
+    ctx.restore();
+  },
 
-    // Draw tiles (viewport culled)
-    const viewL = Camera.x - 32;
-    const viewR = Camera.x + Engine.width + 32;
-    const viewT = Camera.y - 32;
-    const viewB = Camera.y + Engine.height + 32;
-
+  // Tiles, ramps, the tent, gems, rings and checkpoints: one copy of the map,
+  // culled to the view (given in this copy's own coordinates).
+  _drawWorld(ctx, theme, viewL, viewR, viewT, viewB) {
     // ── Circus tent set-piece (Big Drop finale) ──
     // Single source of truth: the tent is drawn around the GOAL tile, so the
     // mouth and the win hitbox can never drift apart.
@@ -657,7 +1013,36 @@ const Level = {
             ctx.fill();
           }
           ctx.restore();
+        } else if (tile.material === 'deck' && !noTop) {
+          // Chevrons moving at the real deck speed, pointing the way it spins.
+          const dir = Math.sign(this.deckSpeed) || 1;
+          ctx.fillStyle = Tokens.rgba(Tokens.color.deckGlow, 0.35);
+          const off = (((performance.now() / 1000 * this.deckSpeed) % 16) + 16) % 16;
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(tile.x, tile.y, tile.w, tile.h);
+          ctx.clip();
+          for (let bx = -16; bx < tile.w + 16; bx += 16) {
+            const cx = tile.x + bx + off;
+            ctx.beginPath();
+            ctx.moveTo(cx, tile.y + 4);
+            ctx.lineTo(cx + dir * 6, tile.y + 8);
+            ctx.lineTo(cx, tile.y + 12);
+            ctx.lineTo(cx + dir * 3, tile.y + 8);
+            ctx.closePath();
+            ctx.fill();
+          }
+          ctx.restore();
         }
+      } else if (tile.type === 'goal' && this.goalLocked) {
+        // Shut gate: dim bars until every brass ring is grabbed.
+        ctx.strokeStyle = Tokens.rgba(Tokens.color.disabled, 0.6);
+        ctx.lineWidth = 2;
+        ctx.strokeRect(tile.x + 2, tile.y + 2, tile.w - 4, tile.h - 4);
+        for (let bx = 8; bx < tile.w - 4; bx += 8) {
+          ctx.beginPath(); ctx.moveTo(tile.x + bx, tile.y + 4); ctx.lineTo(tile.x + bx, tile.y + tile.h - 4); ctx.stroke();
+        }
+        ctx.lineWidth = 1;
       } else if (tile.type === 'goal') {
         // Pulsing goal with theme color
         const gc = theme.goalColor;
@@ -748,6 +1133,49 @@ const Level = {
       }
     }
 
-    ctx.restore();
+    // Water: a translucent body with ripples drifting downstream (left to right).
+    const now = performance.now() / 1000;
+    for (const w of this._cachedHazards) {
+      if (!w.water || w.x + w.w < viewL || w.x > viewR) continue;
+      const lap = Math.sin(w.x / 40 + now * 3) * 1.5;
+      ctx.fillStyle = Tokens.rgba(Tokens.color.water, 0.55);
+      ctx.fillRect(w.x, w.y + lap, w.w, w.h - lap);
+      ctx.fillStyle = Tokens.rgba(Tokens.color.foam, 0.35);
+      ctx.fillRect(w.x, w.y + lap, w.w, 2);
+      ctx.fillStyle = Tokens.rgba(Tokens.color.foam, 0.25);
+      for (let i = 0; i < 2; i++) {
+        const p = (now * 60 + i * 16 + w.x * 0.37) % 32;
+        ctx.fillRect(w.x + p, w.y + 8 + i * 9, Math.min(8, w.w - p), 1);
+      }
+    }
+    // The drawbridge's span before it drops: a faint outline of where it lands.
+    if (!this.bridgeOpen) {
+      ctx.strokeStyle = Tokens.rgba(Tokens.color.dust, 0.12);
+      ctx.setLineDash([4, 4]);
+      for (const r of this.bridgeSpan) ctx.strokeRect(r.x + 0.5, r.y + 0.5, r.w - 1, r.h - 1);
+      ctx.setLineDash([]);
+    }
+
+    // Brass rings, each hanging from an arm that reaches in from above the view.
+    // The arm stays after its ring is grabbed, so you can see which are done.
+    for (const ring of this.rings) {
+      if (ring.x + ring.w < viewL || ring.x > viewR) continue;
+      const cx = ring.x + ring.w / 2, cy = ring.y + ring.h / 2;
+      const sway = Math.sin(performance.now() / 600 + ring.x) * 1.5;
+      ctx.strokeStyle = Tokens.color.brass;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(cx, viewT); ctx.lineTo(cx + sway, cy - 10); ctx.stroke();
+      if (ring.collected) continue;
+      const pulse = 0.75 + 0.25 * Math.sin(performance.now() / 250 + ring.x);
+      ctx.fillStyle = Tokens.rgba(Tokens.color.ring, pulse * 0.18);
+      ctx.beginPath(); ctx.arc(cx + sway, cy, 15, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = Tokens.rgba(Tokens.color.ring, pulse);
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(cx + sway, cy, 9, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = Tokens.rgba(Tokens.color.white, pulse * 0.6);
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(cx + sway, cy, 9, -2.4, -1.2); ctx.stroke();
+    }
+    ctx.lineWidth = 1;
   }
 };

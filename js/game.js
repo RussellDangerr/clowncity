@@ -198,12 +198,14 @@ const Game = {
 
     // Checkpoints: passing the flag's column at ANY height above it counts, so
     // jumping over one never costs it (respawn is still at the flag).
-    for (const cp of Level.checkpoints) {
-      if (!cp.active &&
+    // (Level.near: on a loop level, compare against this lap's copy of each.)
+    for (const flag of Level.checkpoints) {
+      const cp = Level.near(flag);
+      if (!flag.active &&
           Player.x + Player.w > cp.x && Player.x < cp.x + cp.w &&
           Player.y < cp.y + cp.h) {
         for (const other of Level.checkpoints) other.active = false;
-        cp.active = true;
+        flag.active = true;
         Player.setCheckpoint(cp.x, cp.y);
         Particles.burst(cp.x + cp.w / 2, cp.y + cp.h / 2, 12, 100, Tokens.rgba(Tokens.color.goldFlag, 0.7), 0.3);
         Audio.checkpoint();
@@ -211,11 +213,12 @@ const Game = {
     }
 
     // Collectibles
-    for (const col of Level.collectibles) {
-      if (!col.collected &&
+    for (const gem of Level.collectibles) {
+      const col = Level.near(gem);
+      if (!gem.collected &&
           Player.x + Player.w > col.x + 4 && Player.x < col.x + col.w - 4 &&
           Player.y + Player.h > col.y + 4 && Player.y < col.y + col.h - 4) {
-        col.collected = true;
+        gem.collected = true;
         Level.collectedCount++;
         Particles.burst(
           col.x + col.w / 2, col.y + col.h / 2,
@@ -225,8 +228,23 @@ const Game = {
       }
     }
 
-    // Goal
-    const goals = Level.getGoals();
+    // Brass rings: grab them all to open the goal.
+    for (const ring of Level.rings) {
+      const r = Level.near(ring);
+      if (!ring.collected &&
+          Player.x + Player.w > r.x + 4 && Player.x < r.x + r.w - 4 &&
+          Player.y + Player.h > r.y + 4 && Player.y < r.y + r.h - 4) {
+        ring.collected = true;
+        Level.ringsCollected++;
+        Particles.burst(r.x + r.w / 2, r.y + r.h / 2, 18, 140, Tokens.rgba(Tokens.color.ring, 0.9), 0.4);
+        Camera.shake(3);
+        Audio.collect();
+        if (!Level.goalLocked) { Engine.flash('white', 0.25); Audio.checkpoint(); }
+      }
+    }
+
+    // Goal (shut until the rings are in)
+    const goals = Level.goalLocked ? [] : Level.getGoals().map(g => Level.near(g));
     for (const g of goals) {
       if (Player.x + Player.w > g.x && Player.x < g.x + g.w &&
           Player.y + Player.h > g.y && Player.y < g.y + g.h) {
@@ -467,15 +485,23 @@ const Game = {
     ctx.font = Tokens.font.heading;
     ctx.fillText('SELECT LEVEL', Engine.width / 2, 80);
 
-    const cardW = 180;
-    const cardH = 140;
-    const gap = 30;
-    const totalW = this.totalLevels * cardW + (this.totalLevels - 1) * gap;
-    const startX = (Engine.width - totalW) / 2;
-    const cardY = Engine.height / 2 - cardH / 2;
+    // Cards shrink to fit the row once there are more levels than the width holds
+    // (the gap first, down to 8px, so each card keeps ~110px for its text); if a
+    // single row would squeeze them under that, they wrap onto two rows.
+    const fit = (perRow) => {
+      const gap = Math.min(Tokens.space.cardGap, Math.max(8, (Engine.width - 40 - perRow * 110) / Math.max(1, perRow - 1)));
+      return { gap, cardW: Math.min(Tokens.space.cardW, (Engine.width - 40 - (perRow - 1) * gap) / perRow) };
+    };
+    let rows = 1, perRow = this.totalLevels, { gap, cardW } = fit(perRow);
+    if (cardW < 110) { rows = 2; perRow = Math.ceil(this.totalLevels / 2); ({ gap, cardW } = fit(perRow)); }
+    const cardH = rows > 1 ? 124 : Tokens.space.cardH;   // two rows: just tall enough for the stats
+    const rowGap = 12;
+    const startX = (Engine.width - (perRow * cardW + (perRow - 1) * gap)) / 2;
+    const firstY = Engine.height / 2 - (rows * cardH + (rows - 1) * rowGap) / 2 + (rows > 1 ? 14 : 0);
 
     for (let i = 0; i < this.totalLevels; i++) {
-      const x = startX + i * (cardW + gap);
+      const x = startX + (i % perRow) * (cardW + gap);
+      const cardY = firstY + Math.floor(i / perRow) * (cardH + rowGap);
       const selected = i === this._selectedLevel;
       const accessible = i === 0 || this.save.levelsComplete[i - 1];
       const complete = this.save.levelsComplete[i];
@@ -613,6 +639,39 @@ const Game = {
       ctx.lineTo(dx, 18);
       ctx.closePath();
       ctx.fill();
+      ctx.textAlign = 'left';
+    }
+
+    // Gallery counter (tin ducks down), under the gems: the drawbridge's lock.
+    if (Level.targetsTotal > 0) {
+      const label = `${Level.targetsHit} / ${Level.targetsTotal}`;
+      const [, , ring] = Tokens.color.tin;
+      ctx.fillStyle = Level.bridgeOpen ? Tokens.rgba(Tokens.color.success, 0.8) : ring;
+      ctx.font = Tokens.font.body;
+      ctx.textAlign = 'right';
+      ctx.fillText(label, Engine.width - 16, 46);
+      const ix = Engine.width - 16 - ctx.measureText(label).width - 9;
+      ctx.strokeStyle = ctx.fillStyle;
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(ix, 41, 5, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(ix, 41, 1.5, 0, Math.PI * 2); ctx.stroke();
+      ctx.lineWidth = 1;
+      ctx.textAlign = 'left';
+    }
+
+    // Brass-ring counter, under the gems: the goal's lock.
+    if (Level.rings.length > 0) {
+      const label = `${Level.ringsCollected} / ${Level.rings.length}`;
+      ctx.fillStyle = Tokens.rgba(Tokens.color.ring, Level.goalLocked ? 0.8 : 1);
+      ctx.font = Tokens.font.body;
+      ctx.textAlign = 'right';
+      ctx.fillText(label, Engine.width - 16, 46);
+      ctx.strokeStyle = ctx.fillStyle;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(Engine.width - 16 - ctx.measureText(label).width - 9, 41, 5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.lineWidth = 1;
       ctx.textAlign = 'left';
     }
 

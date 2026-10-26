@@ -7,6 +7,10 @@ const Camera = {
   lookaheadY: 30,
   shakeAmount: 0,
   shakeDecay: Tokens.motion.shakeDecay,
+  // A set piece can hand the camera something else to watch ({ x, y }, a centre
+  // point it may keep moving), e.g. the Strongman's puck. null = follow Poko.
+  focus: null,
+  focusSmoothing: 8,       // snappier than the usual follow: a puck moves fast
 
   // Pixel-snapped render offsets. Physics keeps the exact float x/y (so the
   // follow stays smooth), but DRAWING rounds to whole pixels. If the draw
@@ -18,26 +22,28 @@ const Camera = {
   get drawY() { return Math.round(this.y); },
 
   update(dt) {
-    // Target: player center with lookahead based on velocity
-    const px = Player.x + Player.w / 2;
-    const py = Player.y + Player.h / 2;
+    // Target: player center with lookahead based on velocity (or the focus, as is)
+    const f = this.focus;
+    const px = f ? f.x : Player.x + Player.w / 2;
+    const py = f ? f.y : Player.y + Player.h / 2;
 
     // Lead the direction Poko is actually travelling (facing is frozen in the
     // unicycle rework), falling back to committed travelDir during the brake pause.
     const travelDir = Math.sign(Player.vx) || Player.travelDir || 1;
-    const lookX = travelDir * this.lookaheadX;
-    const lookY = (Player.vy > 0 ? 1 : Player.vy < 0 ? -0.5 : 0) * this.lookaheadY;
+    const lookX = f ? 0 : travelDir * this.lookaheadX;
+    const lookY = f ? 0 : (Player.vy > 0 ? 1 : Player.vy < 0 ? -0.5 : 0) * this.lookaheadY;
 
     this.targetX = px + lookX - Engine.width / 2;
     this.targetY = py + lookY - Engine.height / 2;
 
-    // Clamp to level bounds
-    this.targetX = Math.max(0, Math.min(this.targetX, Level.levelWidth - Engine.width));
+    // Clamp to level bounds (a loop level has no ends in x)
+    if (!Level.wrap) this.targetX = Math.max(0, Math.min(this.targetX, Level.levelWidth - Engine.width));
     this.targetY = Math.max(0, Math.min(this.targetY, Level.levelHeight - Engine.height));
 
     // Smooth interpolation
-    this.x += (this.targetX - this.x) * this.smoothing * dt;
-    this.y += (this.targetY - this.y) * this.smoothing * dt;
+    const k = (f ? this.focusSmoothing : this.smoothing) * dt;
+    this.x += (this.targetX - this.x) * k;
+    this.y += (this.targetY - this.y) * k;
 
     // Screenshake
     if (this.shakeAmount > 0.5) {
@@ -61,10 +67,12 @@ const Camera = {
   },
 
   snapToPlayer() {
+    this.focus = null;
     const px = Player.x + Player.w / 2;
     const py = Player.y + Player.h / 2;
     const travelDir = Player.travelDir || 1;
-    const tx = Math.max(0, Math.min(px + travelDir * this.lookaheadX - Engine.width / 2, Level.levelWidth - Engine.width));
+    let tx = px + travelDir * this.lookaheadX - Engine.width / 2;
+    if (!Level.wrap) tx = Math.max(0, Math.min(tx, Level.levelWidth - Engine.width));
     const ty = Math.max(0, Math.min(py - Engine.height / 2, Level.levelHeight - Engine.height));
     this.snapTo(tx, ty);
   }
