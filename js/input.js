@@ -12,6 +12,7 @@ const Input = {
   _jumpDown: false,    // jump held this frame (cleared each update)
   _tapped: false,      // single-frame: a tap happened (menus = confirm)
   _swipeEdge: 0,       // single-frame: -1/+1 when a swipe just registered (menus = navigate)
+  _swipeDown: false,   // single-frame: a downward swipe just registered (stop)
 
   // ── Touch gesture tuning ──
   _touches: {},
@@ -81,8 +82,13 @@ const Input = {
       for (const t of touches) {
         const rec = this._touches[t.identifier];
         if (!rec) continue;
-        const dx = t.clientX - rec.x0;
-        if (Math.abs(dx) >= this.swipeThreshold) {
+        const dx = t.clientX - rec.x0, dy = t.clientY - rec.y0;
+        if (dy >= this.swipeThreshold && dy > Math.abs(dx)) {
+          this._swipeDown = true;
+          rec.swiped = true;
+          rec.x0 = t.clientX;
+          rec.y0 = t.clientY;
+        } else if (Math.abs(dx) >= this.swipeThreshold) {
           const dir = dx > 0 ? 1 : -1;
           this.runDir = dir;
           this._swipeEdge = dir;
@@ -130,6 +136,7 @@ const Input = {
     this._jumpDown = false;
     this._tapped = false;
     this._swipeEdge = 0;
+    this._swipeDown = false;
   },
 
   held(code) {
@@ -155,6 +162,11 @@ const Input = {
 
   jumpHeld() {
     return this._jumpDown || this.held('Space') || this.held('ArrowUp') || this.held('KeyW');
+  },
+
+  // Down: arrow, S, the deck's button or a downward swipe.
+  downPressed() {
+    return this._swipeDown || this.pressed('ArrowDown') || this.pressed('KeyS');
   },
 
   consumeJump() {

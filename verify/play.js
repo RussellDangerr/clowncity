@@ -66,7 +66,10 @@
         : { kind: 'jump', why: 'wall' };
     }
     st.cling = 0;
+    if (Player.hauling) return Player.vy >= 0 && Player.slamFrom === null ? { kind: 'down', why: 'slam' } : null;
+    if (Player.swinging) return Player.swinging.barSpeed * dir > 150 ? { kind: 'jump', why: 'trapeze' } : null;
     if (!Player.grounded) return null;
+    if (Player.parked) return { kind: 'swipe', dir: 1, why: 'roll on' };   // nothing the bot stops for: go on
     if (Player.trampDrop > 0) return { kind: 'jump', why: 'tramp' };   // pump every trampoline
     // ...and jump onto any on the floor ahead: only a landing can pump it.
     for (const e of Entities.list) {
@@ -144,6 +147,7 @@
           if (q.at > frame) continue;
           if (q.kind === 'jump') { Input.buffer.Jump = Input.bufferTime; Input._jumpDown = true; Input._tapped = true; }
           if (q.kind === 'swipe') { Input.runDir = q.dir; Input._swipeEdge = q.dir; }
+          if (q.kind === 'down') Input._swipeDown = true;
           queue.splice(i, 1);
         }
         for (const sys of Engine.systems) if (sys.update) sys.update(dt);

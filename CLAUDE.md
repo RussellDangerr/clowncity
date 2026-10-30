@@ -69,11 +69,14 @@ in a browser to run; deployed live at clowncity.russelldangerr.com (main → Clo
      gaps drop you back a floor. A gap must leave even a late jump's landing clear of the next
      shaft's wall, or the wall-jump sends you back. A trampoline on the ground floor teaches the
      press; one on the top floor is the run-up. Going off the top grabs the hammer
-     (`Player.hauling`: wheel locked, straight drop); the `strongman` entity strikes the plate and
-     grades ONLY the height over the top floor (from `Player.airTop`; `rollFrac` 0.25, `ringRise`
-     160): a roll is ~25% of the pole, a jump ~67%, and a pumped trampoline bounce rings it. A miss
-     puts you back at the top checkpoint. The map's `headroom` lets the camera rise above row 0 for
-     the bounce. The camera rides the puck (`Camera.focus`); the bell opens the goal).
+     (`Player.hauling`: too heavy to steer, he sails on); DOWN slams it straight down, and the
+     `strongman` entity grades ONLY the height he pressed from, against the top floor
+     (`Player.slamFrom`; `rollFrac` 0.25, `ringRise` 150): at the edge ~25% of the pole, pressing
+     late less, the top of a pumped bounce rings it, never pressing is a thud. The bell is a bonus,
+     not a lock: it pays out the gem above it. After any hit he stands by the plate: right is the
+     exit, left at the tower wall flings him back to the top floor with the hammer re-hung. The
+     map's `headroom` lets the camera rise above row 0 for the bounce. The camera rides the puck
+     (`Camera.focus`)).
   3. **The Duck River** (pond theme, 176 wide, left to right: water `w` is lethal; `ducks`
      streams float rubber ducks downstream that BOUNCE Poko (`duckBounce`, a press on landing
      pops to ~297px in the ducks' frame, unpressed ~143). Stream `gaps` are the rhythm and never
@@ -97,12 +100,12 @@ in a browser to run; deployed live at clowncity.russelldangerr.com (main → Clo
      gets a fixed frame in the HUD (`Game._drawLoopFrame`): posts at the screen edges plus a lap
      dial of Poko, the gate and the rings).
   5. **The Big Drop** (midnight, 228 wide x 40 tall, the finale — jumps stepping down, a
-     checkpoint at each. Nets must sit where the camera shows them from the jump (the view is
-     ~8 rows below Poko, 7.5 on the deck): J1 off the start plateau onto a one-way boardwalk, a
-     `trampoline` beside it (fall short → bounced back up onto the boardwalk; PUMPED → onto the **zip line**,
-     a high-wire one-way with `carry: 200` that skips to the final plateau), J2 over a dunk
-     tank (water: a miss ends quickly, not a long wall-slide), J3 a kicker with a safety
-     trampoline under ledge 3, J4 over a dunk tank, then the 16-tile curved ramp: drop / bowl /
+     checkpoint at each, no shortcut. Every pit shows what's in it from the jump (the view is ~8
+     rows below Poko, 7.5 on the deck): a net with solid right under it, or water close under the
+     ledge; never a floor to get stuck on. J1 over a net (`trampoline`), J2 a `trapeze` over water,
+     J3 a kicker over a net, J4 a trapeze to a small island and another to the final plateau (a
+     pit is 13 wide with the bar 5 past its edge: a forward-swing release lands past it), then the
+     16-tile curved ramp: drop / bowl /
      45° lip → launch over a pit → tent on the mesa; unpressed it peaks ~2 tiles under the
      mesa, a press anywhere on the ramp clears it. Passing over the tent's column at any
      height counts as entering it, so an overshoot can't strand you).
@@ -119,7 +122,8 @@ in a browser to run; deployed live at clowncity.russelldangerr.com (main → Clo
   carries + lifts its rider), `DuckStream` (one entity, many bouncy rafts: `getSolidRects`),
   `TinDuck` (`getTargetRect`/`knock`, hit in `Player.checkHazards`), `Strongman` (hammer, lever,
   puck, bell as one state machine), `Trampoline` (elastic one-way: gives back `trampReturn` 0.9 of the
-  height fallen, `trampPump` 1.25 with a press as you land), `OneWayPlatform` (`wire`, `carry` = zip line),
+  height fallen, `trampPump` 1.25 with a press as you land), `Trapeze` (catch in the air, hang on safely
+  as `Player.swinging`; a press throws him the way he's steering, adding the bar's speed), `OneWayPlatform`,
   `Entities.kill()`. Rect getters return the copy nearest Poko on a loop.
 - `js/game.js` — state machine (title/levelSelect/playing/levelComplete/paused/win/tentFinale),
   HUD/menus. `title` is only the boot state under the marquee splash (nothing returns to
@@ -138,6 +142,9 @@ in a browser to run; deployed live at clowncity.russelldangerr.com (main → Clo
 - Per-level palettes live in `Level.themes` (deliberately separate from `Tokens`).
 - Combat: reversing makes the wheel lunge in the OLD direction = the attack; pressing
   your current heading sprays; stomp from above also kills; side/pit contact is fatal.
+- DOWN (`Input.downPressed()`: arrow, S, deck ▼, swipe down) stops the wheel dead with a lethal
+  confetti spray (`Player.parked`; a moving deck or duck still carries him). In the air it's a slam,
+  straight down. The next steer rolls him on; a jump while parked goes straight up.
 - New input sources go through `Input` virtual keys, not new game-logic branches. DOM UI
   that takes touches carries `data-ui`.
 

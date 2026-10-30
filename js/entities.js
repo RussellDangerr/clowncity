@@ -27,6 +27,8 @@ const Entities = {
         this.list.push(new Strongman(def));
       } else if (def.type === 'trampoline') {
         this.list.push(new Trampoline(def));
+      } else if (def.type === 'trapeze') {
+        this.list.push(new Trapeze(def));
       }
     }
   },
@@ -164,11 +166,9 @@ class MovingPlatform {
 // Player passes through from below, lands on top.
 // ═══════════════════════════════════════════
 class OneWayPlatform {
-  constructor({ x, y, w, wire, carry }) {
+  constructor({ x, y, w }) {
     this.x = x; this.y = y;
     this.w = w || 64; this.h = 8;
-    this.wire = !!wire;         // drawn as a high wire between two poles
-    this.carry = carry || 0;    // a zip line: carries a rider along like the carousel deck (Player.carry)
   }
 
   update(dt) {}
@@ -176,29 +176,12 @@ class OneWayPlatform {
   getSolidRect() {
     return {
       x: this.x, y: this.y, w: this.w, h: this.h,
-      oneWay: true, carry: this.carry,
+      oneWay: true,
     };
   }
 
   draw(ctx) {
     const theme = Level.getTheme();
-    if (this.wire) {
-      // A high wire: a taut rope between two striped poles.
-      ctx.fillStyle = Tokens.color.brass;
-      ctx.fillRect(this.x - 4, this.y, 4, 120);
-      ctx.fillRect(this.x + this.w, this.y, 4, 120);
-      ctx.strokeStyle = Tokens.color.tentCream;
-      ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.moveTo(this.x, this.y + 1); ctx.lineTo(this.x + this.w, this.y + 1); ctx.stroke();
-      ctx.lineWidth = 1;
-      // Bunting under the rope, so it reads from far below as somewhere to get to.
-      const pal = Tokens.color.carnival;
-      for (let fx = 8, n = 0; fx < this.w - 8; fx += 40, n++) {
-        ctx.fillStyle = pal[n % pal.length];
-        ctx.beginPath(); ctx.moveTo(this.x + fx, this.y + 3); ctx.lineTo(this.x + fx + 14, this.y + 3); ctx.lineTo(this.x + fx + 7, this.y + 15); ctx.closePath(); ctx.fill();
-      }
-      return;
-    }
     // Dashed/thin platform to visually signal one-way
     ctx.fillStyle = theme.tile[2];
     for (let dx = 0; dx < this.w; dx += 8) {
@@ -558,23 +541,26 @@ class TinDuck {
 // STRONGMAN (the high striker)
 // One machine, every part moving on its own physics, LittleBigPlanet-style:
 //   hanging  the hammer sways on its hook; touching the grab box takes it
-//            (Player.hauling: the wheel locks, he drops straight down)
-//   carried  until he lands. On the plate the hammer strikes: the lever kicks
-//            and the puck launches by how high over the top floor he left
-//            (higher, harder), with the camera riding along (Camera.focus)
+//            (Player.hauling: too heavy to steer, he sails on)
+//   carried  until he lands. DOWN slams it, straight down from there. On the
+//            plate the hammer strikes: the lever kicks and the puck launches by
+//            how high over the top floor he pressed (higher, harder), with the
+//            camera riding along (Camera.focus). Never pressed: a thud.
 //   flight   the puck rises, rings the bell if it reaches it (that opens the
 //            goal), falls back and settles on the lever
-//   return   the camera comes home, then Poko lets go and rolls on. No ring:
-//            the hammer goes back on its hook and Poko back to his last
-//            checkpoint (the top of the tower), for another go.
-// The grade is the skill: a roll is a WEAKLING, a jump is NOT BAD, and a pumped
-// bounce off the top floor's trampoline rings the bell.
+//   return   the camera comes home, then Poko lets go of the hammer
+//   open     he stands by the plate: right is the exit, left at the tower wall
+//   flung    throws him back up to the top floor, the hammer back on its hook.
+// The bell is never needed to leave. It's the bonus: it pays out the gem over it.
+// The grade is the skill: pressing as you roll off is a WEAKLING, at the top of
+// a jump is NOT BAD, and at the top of a pumped bounce off the top floor's
+// trampoline rings the bell. Press on the way down and you've thrown height away.
 // ═══════════════════════════════════════════
 class Strongman {
-  constructor({ hammerX, hammerY, grab, plateX0, plateX1, groundY, topY, trackX, bellY }) {
-    Object.assign(this, { hammerX, hammerY, grab, plateX0, plateX1, groundY, topY, trackX, bellY });
+  constructor({ hammerX, hammerY, grab, plateX0, plateX1, groundY, topY, retryX, trackX, bellY }) {
+    Object.assign(this, { hammerX, hammerY, grab, plateX0, plateX1, groundY, topY, retryX, trackX, bellY });
     this.rollFrac = 0.25;        // how far up the pole a plain roll off the top floor sends the puck
-    this.ringRise = 160;         // px over the top floor he must leave at to ring: a jump is ~90, a pumped bounce ~200
+    this.ringRise = 150;         // px over the top floor he must press at to ring: a jump tops out ~90, a pumped bounce ~200
     this.puckGravity = 600;      // px/s^2 — floaty, so the camera can ride along
     this.state = 'hanging';
     this.t = 0;
@@ -588,7 +574,7 @@ class Strongman {
     this.topple = 0; this.toppleV = 0;     // the dropped hammer falling over (0 upright → π/2 lying)
     this.dropX = 0;                        // where the hammer came down
     this.cam = { x: trackX, y: this.puckY };
-    Level.needsBell = true;
+    this.flingTime = 1.3;        // s to fly him from the plate back to the top floor
   }
 
   get bellBottom() { return this.bellY + 22; }
@@ -600,7 +586,7 @@ class Strongman {
     this.lever += this.leverV * dt;
     this.bellV += (-30 * this.bell - 1.2 * this.bellV) * dt;
     this.bell += this.bellV * dt;
-    if (this.state === 'return' || this.state === 'done') {
+    if (this.state === 'return' || this.state === 'open') {
       if (this.topple < Math.PI / 2 || this.toppleV < 0) {
         this.toppleV += 9 * Math.sin(this.topple + 0.05) * dt;
         this.topple += this.toppleV * dt;
@@ -612,7 +598,7 @@ class Strongman {
       if (!Player.dead && !Player.finished && aabb(Player, this.grab)) this._grab();
     } else if (this.state === 'carried') {
       if (!Player.hauling) { this.state = 'hanging'; return; }      // a restart took it away
-      if (Player.grounded) this._strike(Player.y - Player.airTop);
+      if (Player.grounded) this._strike(Player.slamFrom);
     } else if (this.state === 'flight') {
       this._puck(dt);
       if (this.dingTimer > 0) this.dingTimer -= dt;
@@ -625,27 +611,63 @@ class Strongman {
     } else if (this.state === 'return') {
       this.timer -= dt;
       if (this.timer <= 0) this._release();
+    } else if (this.state === 'open') {
+      if (Player.y < this.groundY - 200) this.state = 'hanging';    // a restart took him back up
+      else if (Player.travelDir < 0 && !Player.parked && Player.grounded && Player.x <= this.plateX0 + 10) this._fling();
+    } else if (this.state === 'flung') {
+      this._flyHome(dt);
+    }
+  }
+
+  _fling() {
+    this.state = 'flung';
+    this.timer = 0;
+    this.flyFrom = { x: Player.x, y: Player.y };
+    this.puckTop = this.puckRest;
+    Player.flung = true;
+    Player.vx = Player.vy = Player.carry = 0;
+    Player.squash = 1.5;
+    Camera.shake(6);
+    Audio.jump();
+    Particles.burst(Player.x + Player.w / 2, this.groundY, 24, 260, Tokens.rgba(Tokens.color.gold, 0.8), 0.5);
+  }
+
+  // Up the drop column first, then in over the top floor (he can't cut through
+  // the tower), landing a run-up short of the trampoline.
+  _flyHome(dt) {
+    if (!Player.flung) { this.state = 'hanging'; return; }           // a restart took him away
+    this.timer += dt;
+    const k = Math.min(1, this.timer / this.flingTime);
+    const up = Math.min(1, k / 0.7), over = Math.max(0, (k - 0.6) / 0.4);
+    const toY = this.topY - Player.h;
+    Player.y = this.flyFrom.y + (toY - 80 - this.flyFrom.y) * (1 - (1 - up) * (1 - up)) + 80 * over * over;
+    Player.x = this.flyFrom.x + (this.retryX - this.flyFrom.x) * over * (2 - over);
+    if (k >= 1) {
+      this.state = 'hanging';
+      Player.spawn(this.retryX, toY, Player.respawnRampTime);
+      Player.respawning = false;
+      Game.objectiveTimer = 6;
+      Game.objective = Game.goalLine;
     }
   }
 
   _grab() {
     this.state = 'carried';
     Player.hauling = true;
-    Player.vx = 0;
-    Player.carry = 0;
+    Player.slamFrom = null;
     Player.squash = 0.8;
     Audio.grab();
     Camera.shake(2);
   }
 
-  _strike(drop) {
+  _strike(slamFrom) {
     this.dropX = Player.x + Player.w / 2;
     this.topple = 0; this.toppleV = 0;
     Camera.shake(10);
     Engine.hitstop(0.08);
     Audio.land();
     Particles.burst(this.dropX, this.groundY, 24, 220, Tokens.rgba(Tokens.color.dust, 0.7), 0.4);
-    if (this.dropX < this.plateX0 || this.dropX > this.plateX1) {   // missed the plate: just a thud
+    if (slamFrom === null || this.dropX < this.plateX0 || this.dropX > this.plateX1) {   // never swung, or missed the plate: just a thud
       this.state = 'return';
       this.timer = 0.4;
       return;
@@ -653,11 +675,11 @@ class Strongman {
     this.state = 'flight';
     this.leverV = -9;                                               // plate end slams down
     this.puckY = this.puckRest;
-    // The whole tower is the same for everyone, so only the height he added over
-    // the top floor grades the hit. No ceiling: past the bell it just rings harder.
+    // Only the height he pressed from counts, measured from the top floor (under
+    // it the hit fades to a tap). No ceiling: past the bell it just rings harder.
     const pole = this.puckRest - this.bellBottom;
-    const rise = Math.max(0, drop - (this.groundY - this.topY));
-    const frac = this.rollFrac + (1 - this.rollFrac) * rise / this.ringRise;
+    const rise = this.topY - slamFrom;
+    const frac = Math.max(0.05, this.rollFrac + (1 - this.rollFrac) * rise / this.ringRise);
     this.puckV = -Math.sqrt(2 * this.puckGravity * pole * frac);
     this.puckTop = this.puckY;
     this.cam.x = this.trackX;
@@ -684,6 +706,8 @@ class Strongman {
 
   _ring() {
     Level.bellRung = true;
+    const gem = Level.collectibles.find(g => !g.collected && Math.abs(g.x - this.trackX) < 48 && g.y < this.bellY);
+    if (gem) { gem.collected = true; Level.collectedCount++; Audio.collect(); }
     this.bellV = 7;
     this.dingTimer = 1.0;
     Engine.flash('white', 0.3);
@@ -697,18 +721,18 @@ class Strongman {
   }
 
   _release() {
-    this.state = Level.bellRung ? 'done' : 'hanging';
+    this.state = 'open';
     if (!Player.hauling) return;
     Player.hauling = false;
-    if (!Level.bellRung) {               // too weak: back up to the last checkpoint for another go
-      Player.respawn();
-      Camera.snapToPlayer();
-      return;
-    }
+    Player.slamming = false;
     Player.vx = 0;
-    Player.runState = 'ramp';
-    Player.rampT = 0;
-    Player.rampTime = Player.respawnRampTime;
+    Player.parked = true;                // standing by the plate: the choice is his
+    Game.objective = this.retryLine;
+    Game.objectiveTimer = 8;
+  }
+
+  get retryLine() {
+    return [Level.bellRung ? 'DING! You rang the bell!' : 'Swing again for the bell, or head out', 'retry'];
   }
 
   // The hammer, its head centred at (hx, hy), the handle pointing at angle a
@@ -760,6 +784,16 @@ class Strongman {
       ctx.fillStyle = Tokens.rgba(Tokens.color.charged, Math.min(1, this.dingTimer * 2));
       ctx.fillText('DING!', this.trackX, this.bellY - 18 - (1 - this.dingTimer) * 20);
     }
+    // The way back up, on the tower wall: a spring and an arrow.
+    if (this.state === 'open') {
+      const sx = this.plateX0 + 4, a = 0.55 + 0.45 * Math.sin(this.t * 5);
+      ctx.fillStyle = Tokens.color.brass;
+      for (let i = 0; i < 4; i++) ctx.fillRect(sx, this.groundY - 14 - i * 8, 14, 3);
+      ctx.fillStyle = Tokens.rgba(Tokens.color.gold, a);
+      ctx.beginPath();
+      ctx.moveTo(sx - 2, this.groundY - 54); ctx.lineTo(sx + 7, this.groundY - 68); ctx.lineTo(sx + 16, this.groundY - 54);
+      ctx.closePath(); ctx.fill();
+    }
     // Puck.
     ctx.fillStyle = Tokens.color.clownNose;
     ctx.fillRect(this.trackX - 9, this.puckY - 6, 18, 12);
@@ -791,6 +825,87 @@ class Strongman {
       this._drawHammer(ctx, this.dropX, this.groundY - 15, this.topple);
     }
     ctx.textAlign = 'left';
+  }
+}
+
+// ═══════════════════════════════════════════
+// TRAPEZE
+// A bar swinging on ropes from (x, y). Touching it in the air catches it, and
+// Poko hangs on for as long as he likes (Player.swinging). A press lets go the
+// way he's steering: swinging that way adds to the throw, swinging back takes
+// from it. DOWN just drops him.
+// ═══════════════════════════════════════════
+class Trapeze {
+  constructor({ x, y, len, swing, period, phase }) {
+    this.x = x; this.y = y;
+    this.len = len || 192;
+    this.swing = swing || 0.6;       // radians either side of straight down
+    this.period = period || 2.4;
+    this.phase = phase || 0;
+    this.t = 0;
+    this.cooldown = 0;               // after letting go, so he doesn't catch it again at once
+    this.throwShare = 0.8;           // how much of the bar's speed goes into the throw
+    this.popSpeed = 360;             // px/s up on letting go
+    this._place();
+  }
+
+  _place() {
+    const w = 2 * Math.PI / this.period;
+    this.angle = this.swing * Math.sin(w * this.t + this.phase);
+    this.spin = this.swing * w * Math.cos(w * this.t + this.phase);
+    this.barX = this.x + Math.sin(this.angle) * this.len;
+    this.barY = this.y + Math.cos(this.angle) * this.len;
+  }
+
+  update(dt) {
+    this.t += dt;
+    if (this.cooldown > 0) this.cooldown -= dt;
+    this._place();
+    if (this.cooldown <= 0 && !Player.swinging && !Player.grounded && !Player.dead && !Player.finished && !Player.hauling &&
+        aabb(Player, { x: this.barX - 34, y: this.barY - 48, w: 68, h: 72 })) {
+      Player.swinging = this;
+      Player.parked = false;
+      Player.slamming = false;
+      Player.vx = Player.vy = Player.carry = 0;
+      Player.squash = 0.8;
+      Audio.grab();
+    }
+  }
+
+  // Which way the bar is heading in x, and how fast (px/s).
+  get barSpeed() { return Math.cos(this.angle) * this.len * this.spin; }
+
+  letGo() {
+    this.cooldown = 0.6;
+    Player.swinging = null;
+  }
+
+  throwPlayer() {
+    const dir = Input.runDir || Player.travelDir;
+    const rise = -Math.sin(this.angle) * this.len * this.spin;        // + = the bar is sinking
+    this.letGo();
+    Object.assign(Player, {
+      travelDir: dir, desiredDir: dir, runState: 'cruise', rampT: 1, turnRecover: false,
+      vx: dir * (Player.runSpeed + dir * this.barSpeed * this.throwShare),
+      vy: -this.popSpeed + Math.min(0, rise) * this.throwShare,
+      coyoteTimer: 0, airTop: Player.y, squash: 1.3,
+    });
+    Input.consumeJump();
+    Audio.jump();
+  }
+
+  draw(ctx) {
+    ctx.strokeStyle = Tokens.rgba(Tokens.color.dust, 0.7);
+    ctx.lineWidth = 2;
+    for (const off of [-16, 16]) {
+      ctx.beginPath(); ctx.moveTo(this.x + off / 2, this.y); ctx.lineTo(this.barX + off, this.barY); ctx.stroke();
+    }
+    ctx.lineWidth = 1;
+    ctx.fillStyle = Tokens.color.brass;
+    ctx.fillRect(this.x - 14, this.y - 4, 28, 6);
+    ctx.fillRect(this.barX - 20, this.barY - 2, 40, 5);
+    ctx.fillStyle = Tokens.color.tentRed;
+    ctx.fillRect(this.barX - 6, this.barY - 2, 12, 5);
   }
 }
 
