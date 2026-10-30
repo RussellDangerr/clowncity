@@ -346,8 +346,8 @@ const Player = {
   // Hanging from a trapeze: he goes where the bar goes until he lets go.
   _swing(dt) {
     const bar = this.swinging;
-    this.x = bar.barX - this.w / 2;
-    this.y = bar.barY - 4;
+    this.x = bar.riderX - this.w / 2;
+    this.y = bar.riderY - 4;
     this.grounded = false;
     this.wasGrounded = false;
     this.lean = -bar.angle;

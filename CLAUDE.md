@@ -102,10 +102,10 @@ in a browser to run; deployed live at clowncity.russelldangerr.com (main → Clo
   5. **The Big Drop** (midnight, 228 wide x 40 tall, the finale — jumps stepping down, a
      checkpoint at each, no shortcut. Every pit shows what's in it from the jump (the view is ~8
      rows below Poko, 7.5 on the deck): a net with solid right under it, or water close under the
-     ledge; never a floor to get stuck on. J1 over a net (`trampoline`), J2 a `trapeze` over water,
-     J3 a kicker over a net, J4 a trapeze to a small island and another to the final plateau (a
-     pit is 13 wide with the bar 5 past its edge: a forward-swing release lands past it), then the
-     16-tile curved ramp: drop / bowl /
+     ledge; never a floor to get stuck on. Lessons stack: J1 a net (`trampoline`), J2 a `trapeze`
+     over water, J3 a kicker over a net, J4 a trapeze to a small island, then both at once: only a
+     pumped bounce off a low net flies high and far enough to catch the big trapeze over the
+     water. Then the 16-tile curved ramp: drop / bowl /
      45° lip → launch over a pit → tent on the mesa; unpressed it peaks ~2 tiles under the
      mesa, a press anywhere on the ramp clears it. Passing over the tent's column at any
      height counts as entering it, so an overshoot can't strand you).
@@ -122,8 +122,9 @@ in a browser to run; deployed live at clowncity.russelldangerr.com (main → Clo
   carries + lifts its rider), `DuckStream` (one entity, many bouncy rafts: `getSolidRects`),
   `TinDuck` (`getTargetRect`/`knock`, hit in `Player.checkHazards`), `Strongman` (hammer, lever,
   puck, bell as one state machine), `Trampoline` (elastic one-way: gives back `trampReturn` 0.9 of the
-  height fallen, `trampPump` 1.25 with a press as you land), `Trapeze` (catch in the air, hang on safely
-  as `Player.swinging`; a press throws him the way he's steering, adding the bar's speed), `OneWayPlatform`,
+  height fallen, `trampPump` 1.25 with a press as you land), `Trapeze` (a real pendulum that hangs still until caught: his
+  velocity at the catch sets the swing, a press lets go with the bar's real velocity plus a pop; hanging on as
+  `Player.swinging` is safe and keeps its energy), `OneWayPlatform`,
   `Entities.kill()`. Rect getters return the copy nearest Poko on a loop.
 - `js/game.js` — state machine (title/levelSelect/playing/levelComplete/paused/win/tentFinale),
   HUD/menus. `title` is only the boot state under the marquee splash (nothing returns to

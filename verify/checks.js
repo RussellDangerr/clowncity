@@ -450,7 +450,7 @@
       const bowl = ramp.pts.reduce((a, p) => (p.y > a.y ? p : a));        // lowest point
       const ride = (pressAt) => {
         play(i); cleanInput();
-        Player.spawn(ramp.x0 - 8 * Level.tileSize, ramp.pts[0].y - Player.h, 0.01);   // cruising on the final plateau
+        Player.spawn(ramp.x0 - 6 * Level.tileSize, ramp.pts[0].y - Player.h, 0.01);   // cruising on the final plateau
         Player.respawning = false;
         Object.assign(Player, { vx: Player.runSpeed, runState: 'cruise', rampT: 1 });
         let pressed = pressAt == null, launch = null;
@@ -1013,44 +1013,88 @@
         assert(Player.dead, `rolling off the ledge at col ${col} should end in the water (row ${feetRow().toFixed(1)})`);
       }
 
-      // The trapeze: catch from a jump, hang on, throw across from the forward swing.
+      // The trapeze hangs still, and his flight sets the swing.
       const bars = () => Entities.list.filter(e => e instanceof Trapeze);
-      const trial = (ledgeCol, ledgeRow, farRow, delay, barIndex) => {
+      const peakAngle = (vx, vy) => {
+        play(i); cleanInput();
+        const bar = bars()[0];
+        Player.spawn(bar.barX - Player.w / 2 - 10, bar.barY - 10, 0.01); Player.respawning = false;
+        Object.assign(Player, { vx, vy, runState: 'cruise', rampT: 1, travelDir: Math.sign(vx) });
+        Input.runDir = Math.sign(vx);
+        for (let f = 0; f < 60 && !Player.swinging; f++) step(Engine.fixedDt);
+        assert(Player.swinging === bar, `flying in at ${vx},${vy} should catch the bar`);
+        let peak = 0;
+        for (let f = 0; f < 120 * 3; f++) { step(Engine.fixedDt); peak = Math.max(peak, bar.angle * Math.sign(vx)); }
+        return peak;
+      };
+      const slow = peakAngle(250, 0), fast = peakAngle(550, 0), steep = peakAngle(250, 500), back = peakAngle(-400, 0);
+      assert(fast > slow + 0.3, `a faster catch should swing bigger (${slow.toFixed(2)} vs ${fast.toFixed(2)} rad)`);
+      assert(steep > slow + 0.1, `a steeper catch should swing bigger (${slow.toFixed(2)} vs ${steep.toFixed(2)} rad)`);
+      assert(back > 0.3, `flying in backwards should swing backwards (${back.toFixed(2)} rad)`);
+
+      // Off a ledge: any sensible takeoff catches it; letting go on the way up the
+      // forward swing lands on the far side; and hanging on keeps the swing.
+      const trial = (ledgeCol, ledgeRow, edge, takeoff, far) => {
         cruise(ledgeCol, ledgeRow);
-        Entities.update(0);
-        for (const b of bars()) { b.t = delay; b._place(); }
         let jumped = false, caught = false;
-        const edge = barIndex === 0 ? 51 : 99;
-        for (let f = 0; f < 120 * 6; f++) {
-          if (!jumped && Player.x + Player.w >= (edge - 1.5) * T) { Input.tapKey('Space'); jumped = true; }
+        for (let f = 0; f < 120 * 8; f++) {
+          if (!jumped && Player.x + Player.w >= (edge - takeoff) * T) { Input.tapKey('Space'); jumped = true; }
           if (Player.swinging) {
             caught = true;
-            if (Player.swinging.barSpeed > 150) Input.tapKey('Space');
+            if (Player.swinging.barSpeed > 100 && Player.swinging.angle > 0.1) Input.tapKey('Space');
           }
           step(Engine.fixedDt);
           if (Player.dead) return { caught, end: 'drowned' };
-          if (Player.grounded && jumped && !Player.trampDrop && Player.x > edge * T) return { caught, end: feetRow() };
-          if (Player.grounded && Player.x > edge * T + 800) break;
+          if (Player.grounded && jumped && Player.x > edge * T) return { caught, end: feetRow() };
         }
         return { caught, end: 'timeout' };
       };
-      const N = 12;
+      const takeoffs = [0.5, 1, 1.5, 2, 2.5, 3];
       let caught = 0, across = 0;
-      for (let k = 0; k < N; k++) {
-        const r = trial(44, 11, 15, 2.4 * k / N, 0);
-        if (r.caught) caught++;
-        if (r.end === 15) across++;
+      for (const [col, row, edge, far] of [[44, 11, 51, 15], [92, 17, 99, 19]]) {
+        for (const t of takeoffs) {
+          const r = trial(col, row, edge, t, far);
+          if (r.caught) caught++;
+          if (r.end === far) across++;
+        }
       }
-      assert(caught >= N * 0.75, `a jump off ledge 1 should catch the trapeze at most moments (${caught}/${N})`);
-      assert(across >= N * 0.75, `a forward release should reach ledge 2 (${across}/${N})`);
-
-      // Hanging on is safe, for as long as you like.
+      const tries = takeoffs.length * 2;
+      assert(caught === tries, `every takeoff should catch the trapeze (${caught}/${tries})`);
+      assert(across === tries, `letting go on the forward swing should land across (${across}/${tries})`);
       cruise(44, 11);
       for (let f = 0; f < 120 * 8 && !Player.swinging && !Player.dead; f++) {
         if (Player.x + Player.w >= 49.5 * T && Player.grounded) Input.tapKey('Space');
         step(Engine.fixedDt);
       }
-      if (Player.swinging) { step(6); assert(Player.swinging && !Player.dead, 'hanging on should be safe'); }
+      assert(Player.swinging, 'a jump off the ledge should catch the bar');
+      let swing = 0;
+      step(4);
+      for (let f = 0; f < 120 * 3; f++) { step(Engine.fixedDt); swing = Math.max(swing, Player.swinging.angle); }
+      assert(!Player.dead && swing > 0.3, `hanging on should be safe and keep swinging (${swing.toFixed(2)} rad after 4s)`);
+
+      // The combo: only a pumped net bounce reaches the big trapeze, which carries
+      // him across to the final plateau.
+      const combo = (pump, takeoff) => {
+        cruise(113, 18);
+        let jumped = takeoff === null, big = false;
+        for (let f = 0; f < 120 * 10; f++) {
+          if (!jumped && Player.x + Player.w >= (117 - takeoff) * T) { Input.tapKey('Space'); jumped = true; }
+          if (pump && Player.trampDrop > 0) Input.tapKey('Space');
+          if (Player.swinging) {
+            big = true;
+            if (Player.swinging.barSpeed > 100 && Player.swinging.angle > 0.1) Input.tapKey('Space');
+          }
+          step(Engine.fixedDt);
+          if (Player.dead) return { big, end: 'drowned' };
+          if (Player.grounded && !Player.trampDrop && Player.x > 126 * T) return { big, end: feetRow() };
+        }
+        return { big, end: 'timeout' };
+      };
+      for (const takeoff of [null, 0.5, 1.5, 2.5]) {
+        const pumped = combo(true, takeoff), flat = combo(false, takeoff);
+        assert(pumped.big && pumped.end >= 20 && pumped.end < 21, `a pumped bounce (takeoff ${takeoff}) should catch the big trapeze and reach the plateau (${JSON.stringify(pumped)})`);
+        assert(!flat.big, `an unpressed bounce (takeoff ${takeoff}) shouldn't reach the big trapeze (${JSON.stringify(flat)})`);
+      }
 
       // Jump 4: pass ledge 3's flag, fall in, come back at ledge 3.
       cruise(90, 17);
@@ -1058,7 +1102,7 @@
       assert(Player.dead, 'rolling off ledge 3 with no jump should fall in the water');
       for (let f = 0; f < 120 && Player.dead; f++) step(Engine.fixedDt);
       assert(Math.abs(Player.x - 92 * T) < T, `should respawn at ledge 3's flag (col ${(Player.x / T).toFixed(1)})`);
-      return `nets bounce back to rows 12 and 18; no floors to get stuck on; trapeze caught ${caught}/${N}, forward throw across ${across}/${N}; J4 fall → back at J4`;
+      return `nets bounce back to rows 12 and 18; no floors to get stuck on; swing ${slow.toFixed(2)} slow, ${fast.toFixed(2)} fast, ${steep.toFixed(2)} steep; trapeze caught ${caught}/${tries}, across ${across}/${tries}; pumped net → big trapeze → plateau; J4 fall → back at J4`;
     },
     // ── checks added by later tasks go here, in task order ──
   };
