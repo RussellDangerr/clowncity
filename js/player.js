@@ -34,7 +34,9 @@ const Player = {
   accelRate: 1400,          // px/s^2 — chase target during the start ramp
   cruiseAccel: 420,         // px/s^2 — DELIBERATE eased build to top speed in cruise (~1.2s)
   reverseDecel: 2400,       // px/s^2 — braking old momentum during a turnaround
-  reverseAccel: 1600,       // px/s^2 — re-earning speed after a turn (cruise → full in ~0.55s)
+  reverseAccel: 1600,       // px/s^2 — re-earning speed after a turn (only the 'old' turn, or a spray's cost)
+  turnMode: new URLSearchParams(location.search).get('turn') || 'sling',    // 'sling' | 'old'
+  sprayMode: new URLSearchParams(location.search).get('spray') || 'free',   // 'free' | 'kick' | 'cost'
   pauseAtZeroTime: 0.03,    // brief commit beat at the bottom of a reversal (tightened)
   zeroEpsilon: 12,          // |vx| under this counts as "stopped"
   treadmillCap: 200,        // 0.5 * runSpeed — speed cap while on a treadmill
@@ -50,7 +52,8 @@ const Player = {
 
   // ── Spin-out attack (tap your CURRENT direction with momentum) ──
   attackThreshold: 0.5,     // momentum (0..1) needed to spin out an attack
-  spinAttackCost: 0.45,     // fraction of speed spent on a spin-out (bleeds momentum)
+  spinAttackCost: 0.45,     // fraction of speed spent on a spin-out ('cost' spray only)
+  spinAttackKick: 120,      // px/s added by a spin-out ('kick' spray only)
   spinAttackWindow: 0.16,   // hitbox lifetime
   spinAttackCooldown: 0.22, // min seconds between spin-outs
 
@@ -128,6 +131,7 @@ const Player = {
   pausedAtZero: 0,        // commit-beat accumulator at the bottom of a reversal
   attackDir: 0,           // wheel-throw direction (= old travelDir); 0 = inactive
   turnRecover: false,     // just turned: re-earn speed at reverseAccel until back at cruise
+  slingSpeed: 0,          // speed the brake stored, paid back the new way (a slingshot turn)
   lipLoaded: false,      // a jump pressed on a kicker, waiting to fire at the lip
   lipGraceTimer: 0,       // counts down after flying off a launcher's lip (a late press still pops)
 
@@ -421,6 +425,7 @@ const Player = {
       this.runState = 'brake';
       this.brakeTimer = this.brakeWindow;
       this.pausedAtZero = 0;
+      this.slingSpeed = Math.max(Math.abs(this.vx), this.runSpeed);   // never comes out under cruise
       this.attackDir = this.travelDir;     // old direction = lunge / attack dir
       this.squash = 1.25;
       Audio.bounce();
@@ -454,7 +459,14 @@ const Player = {
           this.travelDir = this.desiredDir;
           this.attackDir = 0;
           this.runState = 'cruise';
-          this.turnRecover = true;
+          if (this.turnMode === 'sling') {
+            // The brake wound the speed up; let it go the new way. Turning is the
+            // core move, so it costs its ~0.2s and no speed at all.
+            this.vx = this.travelDir * this.slingSpeed;
+            this.squash = 1.3;
+          } else {
+            this.turnRecover = true;
+          }
         }
       }
     } else {
@@ -544,8 +556,8 @@ const Player = {
     // ── Spin-out attack ──
     // Tap your CURRENT direction (re-press the key / swipe the way you're going)
     // with momentum >= threshold to spit the wheel out forward and kill what's
-    // ahead — no reversing needed, works on the ground OR mid-air. Spends
-    // momentum, so you slow and re-earn it. (Clinging a wall zeroes vx, dropping
+    // ahead — no reversing needed, works on the ground OR mid-air. Costs no
+    // speed: an attack shouldn't punish you. (Clinging a wall zeroes vx, dropping
     // momentum below the threshold, so it won't fire while you're wall-stuck.)
     if (this._spinCooldown > 0) this._spinCooldown -= dt;
     if (this.spinAttackTimer > 0) this.spinAttackTimer -= dt;
@@ -985,7 +997,8 @@ const Player = {
       // A top that drops away (a horse on the way down) falls faster than gravity
       // catches Poko up on the first frame; reaching down by its drop keeps him seated.
       const reach = rect.dy > 0 ? rect.dy + 1 : 0;
-      if (this.vy >= 0 && footY >= rect.y - reach && prevFootY <= rect.y + 6) {
+      // A trampoline on a floor is level with the wheel, so it catches a roll too.
+      if (this.vy >= 0 && footY >= rect.y - reach && prevFootY <= rect.y + (rect.elastic ? rect.h : 6)) {
         this.y = rect.y - this.h;
         this.grounded = true;
         this.vy = 0;
@@ -1083,13 +1096,17 @@ const Player = {
     return null;
   },
 
-  // Spin-out: spit the wheel forward, spend momentum (bleed speed), spray.
+  // Spin-out: spit the wheel forward and spray.
   _doSpinAttack() {
     this.spinAttackDir = this.travelDir;
     this.spinAttackTimer = this.spinAttackWindow;
     this._spinCooldown = this.spinAttackCooldown;
-    this.vx *= (1 - this.spinAttackCost);
-    this.turnRecover = false;               // the spray's cost is re-earned the slow way
+    if (this.sprayMode === 'cost') {
+      this.vx *= (1 - this.spinAttackCost);
+      this.turnRecover = false;             // the spray's cost is re-earned the slow way
+    } else if (this.sprayMode === 'kick') {
+      this.vx += this.travelDir * this.spinAttackKick;
+    }
     this.squash = 1.2;
     Camera.shake(2);
     Audio.bounce();

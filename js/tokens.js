@@ -73,6 +73,7 @@ const Tokens = {
     water:     [40, 110, 170],                   // river body
     foam:      [170, 220, 255],                  // river surface ripples + splash
     duck:      ['#ffd23f', '#f28c28', '#c9a227'], // rubber duck [body, beak, shade]
+    duckBig:   ['#ff5fa2', '#f28c28', '#b83a76'], // the duck to press on: a big gap follows it
     tin:       ['#b8c0c8', '#7d868f', '#e04848'], // gallery tin duck [face, shade, target ring]
   },
 
@@ -97,6 +98,7 @@ const Tokens = {
   // ── Spacing / layout (px on the fixed 960×540 canvas) ──
   space: {
     hudMargin: 16,   // HUD inset from screen edges
+    loopPost: 16,    // a loop level's fixed posts at the screen edges
     hudTouchLeft: 112, // left HUD inset on touch screens: the floating pause button owns the corner
     hudTop:    24,   // HUD text baseline from top
     cardW:    180,   // level-select card

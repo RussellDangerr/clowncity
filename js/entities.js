@@ -401,7 +401,8 @@ class CarouselHorse {
 // `gaps` (px, cycled) is the spacing between ducks; since they all drift
 // together it never changes, so seen from a duck the river is a fixed row of
 // stepping stones. Each duck is a bouncy one-way top: landing squeaks Poko
-// back up (Player.duckBounce) and hands him the current (carry).
+// back up (Player.duckBounce) and hands him the current (carry). A duck with a
+// big gap ahead of it is pink: that's the one to press on.
 // ═══════════════════════════════════════════
 class DuckStream {
   constructor({ x0, x1, y, speed, gaps }) {
@@ -410,7 +411,7 @@ class DuckStream {
     this.speed = speed || 120;      // + = downstream to the right
     this.gaps = gaps || [192];
     this.w = 64; this.h = 8;
-    this.ducks = [];                // { x, t } — t only staggers the bob
+    this.ducks = [];                // { x, t, big } — t only staggers the bob; big = a press-sized gap ahead
     this.gi = 0;                    // next gap in the cycle
     this.sinceSpawn = 0;            // px drifted since the last duck appeared
     this.t = 0;
@@ -420,9 +421,9 @@ class DuckStream {
     for (let s = 0; s < fill; s += 0.05) this._drift(0.05);
   }
 
-  _spawn(ahead) {
+  _spawn(ahead, big) {
     const dir = Math.sign(this.speed);
-    this.ducks.push({ x: (dir > 0 ? this.x0 : this.x0 - this.w) + dir * ahead, t: Math.random() * 6 });
+    this.ducks.push({ x: (dir > 0 ? this.x0 : this.x0 - this.w) + dir * ahead, t: Math.random() * 6, big });
   }
 
   _drift(dt) {
@@ -436,7 +437,7 @@ class DuckStream {
     if (this.sinceSpawn >= gap) {
       this.sinceSpawn -= gap;
       this.gi++;
-      this._spawn(this.sinceSpawn);   // carry the leftover so spacing stays exact
+      this._spawn(this.sinceSpawn, gap > 200);   // carry the leftover so spacing stays exact
     }
   }
 
@@ -458,9 +459,9 @@ class DuckStream {
   }
 
   draw(ctx) {
-    const [body, beak, shade] = Tokens.color.duck;
     const dir = Math.sign(this.speed) || 1;
     for (const d of this.ducks) {
+      const [body, beak, shade] = d.big ? Tokens.color.duckBig : Tokens.color.duck;
       // Fade in and out at the ends, where they slip out from under the banks.
       const into = Math.abs(d.x - this.x0), left = Math.abs(this.x1 - d.x);
       ctx.globalAlpha = Math.max(0, Math.min(1, into / 24, left / 24));
@@ -478,6 +479,11 @@ class DuckStream {
       ctx.beginPath(); ctx.moveTo(hx + dir * 6, top - 8); ctx.lineTo(hx + dir * 15, top - 5); ctx.lineTo(hx + dir * 6, top - 2); ctx.fill();
       ctx.fillStyle = Tokens.color.eyePupil;
       ctx.beginPath(); ctx.arc(hx + dir * 3, top - 9, 1.5, 0, Math.PI * 2); ctx.fill();
+      if (d.big) {                      // a little up-arrow over its back: press here
+        const ay = top - 22 + Math.sin(this.t * 6) * 2;
+        ctx.fillStyle = body;
+        ctx.beginPath(); ctx.moveTo(cx - 8, ay); ctx.lineTo(cx, ay - 9); ctx.lineTo(cx + 8, ay); ctx.fill();
+      }
     }
     ctx.globalAlpha = 1;
   }
@@ -554,21 +560,21 @@ class TinDuck {
 //   hanging  the hammer sways on its hook; touching the grab box takes it
 //            (Player.hauling: the wheel locks, he drops straight down)
 //   carried  until he lands. On the plate the hammer strikes: the lever kicks
-//            and the puck launches to a height of drop × gain (bigger drop,
-//            bigger hit), with the camera riding along (Camera.focus)
+//            and the puck launches by how high over the top floor he left
+//            (higher, harder), with the camera riding along (Camera.focus)
 //   flight   the puck rises, rings the bell if it reaches it (that opens the
 //            goal), falls back and settles on the lever
 //   return   the camera comes home, then Poko lets go and rolls on. No ring:
 //            the hammer goes back on its hook and Poko back to his last
 //            checkpoint (the top of the tower), for another go.
-// The grade is the skill: rolling off the top edge drops ~1216px and the puck
-// stops just short of the bell; JUMPING off for the hammer adds the jump's
-// height (~1304px) and rings it.
+// The grade is the skill: a roll is a WEAKLING, a jump is NOT BAD, and a pumped
+// bounce off the top floor's trampoline rings the bell.
 // ═══════════════════════════════════════════
 class Strongman {
-  constructor({ hammerX, hammerY, grab, plateX0, plateX1, groundY, trackX, bellY }) {
-    Object.assign(this, { hammerX, hammerY, grab, plateX0, plateX1, groundY, trackX, bellY });
-    this.gain = 0.96;            // puck launch height per px of drop: a roll-off peaks ~40px under the bell, a jump-off rings it with ~45px spare
+  constructor({ hammerX, hammerY, grab, plateX0, plateX1, groundY, topY, trackX, bellY }) {
+    Object.assign(this, { hammerX, hammerY, grab, plateX0, plateX1, groundY, topY, trackX, bellY });
+    this.rollFrac = 0.25;        // how far up the pole a plain roll off the top floor sends the puck
+    this.ringRise = 160;         // px over the top floor he must leave at to ring: a jump is ~90, a pumped bounce ~200
     this.puckGravity = 600;      // px/s^2 — floaty, so the camera can ride along
     this.state = 'hanging';
     this.t = 0;
@@ -647,7 +653,12 @@ class Strongman {
     this.state = 'flight';
     this.leverV = -9;                                               // plate end slams down
     this.puckY = this.puckRest;
-    this.puckV = -Math.sqrt(2 * this.puckGravity * drop * this.gain);
+    // The whole tower is the same for everyone, so only the height he added over
+    // the top floor grades the hit. No ceiling: past the bell it just rings harder.
+    const pole = this.puckRest - this.bellBottom;
+    const rise = Math.max(0, drop - (this.groundY - this.topY));
+    const frac = this.rollFrac + (1 - this.rollFrac) * rise / this.ringRise;
+    this.puckV = -Math.sqrt(2 * this.puckGravity * pole * frac);
     this.puckTop = this.puckY;
     this.cam.x = this.trackX;
     this.cam.y = this.puckY;
@@ -788,12 +799,13 @@ class Strongman {
 // A one-way bounce pad that gives back the height Poko fell (Player.trampReturn
 // of it, or trampPump with a press as he lands). In a pit it's a safety net
 // that bounces him back up to the ledge he missed; pumped, it can launch him
-// far higher than he started.
+// far higher than he started. On a floor it's a run-up (the Strongman's top).
 // ═══════════════════════════════════════════
 class Trampoline {
-  constructor({ x, y, w }) {
+  constructor({ x, y, w, leg }) {
     this.x = x; this.y = y;
     this.w = w || 96; this.h = 8;
+    this.leg = leg || 8;        // px of frame down to whatever it stands on
     this.sag = 0;               // the bed dips when he lands and springs back
   }
 
@@ -811,8 +823,8 @@ class Trampoline {
     const dip = Math.sin(this.sag * Math.PI) * 6;
     // Legs every few tiles down to the floor beneath.
     ctx.fillStyle = Tokens.color.plank[1];
-    for (let lx = this.x + 6; lx < this.x + this.w - 4; lx += 64) ctx.fillRect(lx, this.y + 4, 4, 24);
-    ctx.fillRect(this.x + this.w - 10, this.y + 4, 4, 24);
+    for (let lx = this.x + 6; lx < this.x + this.w - 4; lx += 64) ctx.fillRect(lx, this.y + 4, 4, this.leg);
+    ctx.fillRect(this.x + this.w - 10, this.y + 4, 4, this.leg);
     // Striped bed (red / cream), dipping in the middle when he lands.
     for (let bx = 0; bx < this.w; bx += 16) {
       const mid = 1 - Math.abs((bx + 8) / this.w * 2 - 1);

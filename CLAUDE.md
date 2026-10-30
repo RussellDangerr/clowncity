@@ -67,20 +67,24 @@ in a browser to run; deployed live at clowncity.russelldangerr.com (main → Clo
   2. **The Strongman** (strongman theme, 48 wide x **45 tall** — maps aren't fixed at 25 rows:
      a tower of four wall-jump shafts on alternating sides, floors running opposite ways, floor
      gaps drop you back a floor. A gap must leave even a late jump's landing clear of the next
-     shaft's wall, or the wall-jump sends you back. Going off the top grabs the hammer
-     (`Player.hauling`: wheel locked, straight drop); the `strongman` entity strikes the plate
-     with puck height = drop × 0.96 (drop from `Player.airTop`, not fall speed, which caps at
-     720): rolling off peaks ~50px under the bell and puts you back at the top checkpoint,
-     JUMPING off rings it. The camera rides the puck (`Camera.focus`); the bell opens the goal).
+     shaft's wall, or the wall-jump sends you back. A trampoline on the ground floor teaches the
+     press; one on the top floor is the run-up. Going off the top grabs the hammer
+     (`Player.hauling`: wheel locked, straight drop); the `strongman` entity strikes the plate and
+     grades ONLY the height over the top floor (from `Player.airTop`; `rollFrac` 0.25, `ringRise`
+     160): a roll is ~25% of the pole, a jump ~67%, and a pumped trampoline bounce rings it. A miss
+     puts you back at the top checkpoint. The map's `headroom` lets the camera rise above row 0 for
+     the bounce. The camera rides the puck (`Camera.focus`); the bell opens the goal).
   3. **The Duck River** (pond theme, 176 wide, left to right: water `w` is lethal; `ducks`
      streams float rubber ducks downstream that BOUNCE Poko (`duckBounce`, a press on landing
      pops to ~297px in the ducks' frame, unpressed ~143). Stream `gaps` are the rhythm and never
      change as ducks drift, so hop distances are independent of the current's speed: 144 = hop,
-     296 = press. A nose-to-tail creek (the lesson), two rivers (144/144/296, then 144/296)
-     split by a 10-tile island; then a shooting gallery pen: five `tinduck`s on a rail, knocked
-     down by spray/lunge, and the last drops the drawbridge (`u` wall → `n` span,
-     `Level.openBridge`). Boarding off a bank can be blocked for <1s of each duck cycle;
-     turning on the bank is the wait).
+     296 = press, and the duck before a big gap is PINK with an up-arrow. A nose-to-tail creek
+     (the lesson), three rivers (144/144/296, then 144/296 twice) split by checkpoint islands 10+
+     tiles wide (a pressed hop overshoots anything narrower, so mid-river rocks don't work); then a
+     shooting gallery pen: five `tinduck`s on a rail, knocked down by spray/lunge, and the last drops
+     the drawbridge (`u` wall → `n` span, `Level.openBridge`). The map's `lessons` swap the goal line
+     on the way past. Boarding off a bank can be blocked for <1s of each duck cycle; turning on the
+     bank is the wait).
   4. **The Carousel** (carousel theme, 120 wide, `wrap: true` — a LOOP: no edge walls, Poko's
      x keeps growing lap after lap and every lookup folds through `Level.near(rect)` / wrapped
      columns. The `D` deck carries Poko at the map's `deckSpeed` (160): with the spin 560 px/s,
@@ -89,10 +93,13 @@ in a browser to run; deployed live at clowncity.russelldangerr.com (main → Clo
      horse 3 at a fixed height (`ring: true`; a pressed bounce off that horse grabs it), C `r`
      off the far end of the 32-tile booth roof (a pressed horse bounce gets you up). Lessons
      from making it fair: hazards ≥ a jump apart (~11.5 tiles at 560), and the bob period must
-     not divide the 9.6s you take to lap a horse (2.4 did: same bob height every meeting)).
+     not divide the 9.6s you take to lap a horse (2.4 did: same bob height every meeting). A loop
+     gets a fixed frame in the HUD (`Game._drawLoopFrame`): posts at the screen edges plus a lap
+     dial of Poko, the gate and the rings).
   5. **The Big Drop** (midnight, 228 wide x 40 tall, the finale — jumps stepping down, a
-     checkpoint at each: J1 off the start plateau onto a one-way boardwalk, a `trampoline`
-     under it (fall short → bounced back up onto the boardwalk; PUMPED → onto the **zip line**,
+     checkpoint at each. Nets must sit where the camera shows them from the jump (the view is
+     ~8 rows below Poko, 7.5 on the deck): J1 off the start plateau onto a one-way boardwalk, a
+     `trampoline` beside it (fall short → bounced back up onto the boardwalk; PUMPED → onto the **zip line**,
      a high-wire one-way with `carry: 200` that skips to the final plateau), J2 over a dunk
      tank (water: a miss ends quickly, not a long wall-slide), J3 a kicker with a safety
      trampoline under ledge 3, J4 over a dunk tank, then the 16-tile curved ramp: drop / bowl /
@@ -104,7 +111,7 @@ in a browser to run; deployed live at clowncity.russelldangerr.com (main → Clo
   `solidGrid` (edge drawing, the bot). Materials (`solid`, `treadmill`, `boost`, `deck`,
   `plank`), themes, rendering. Tile legend: `1` solid, `0` air, `T` treadmill, `B` boost belt,
   `D` carousel deck, `r` brass ring, `w` water, `u`/`n` drawbridge up/down, `g` goal, `c`
-  checkpoint (passing its column at any height takes it), `o` gem, `/` `\` slopes (rise right /
+  checkpoint (passing its column at any height takes it, once; a loop's keep working), `o` gem, `/` `\` slopes (rise right /
   rise left, 45°). Most maps are 25 rows with the floor on rows 22–24 and spawn `[3,21]`; the
   Strongman (45) and the Big Drop (40, spawn `[3,7]`) are taller. Set-piece maps carry an
   `objective: [goal, Layout hint key]` shown at the start and when you bump the lock.
@@ -136,11 +143,14 @@ in a browser to run; deployed live at clowncity.russelldangerr.com (main → Clo
 
 ## Tuning knobs (all in `player.js` constants)
 `runSpeed` (400), `startRampTime` (1.5, level start), `respawnRampTime` (0.4),
-`reverseDecel` (2400, the turn's brake), `reverseAccel` (1600, speed back after a turn — turning is the core move, so it's cheap; a spin-out's cost re-earns at `cruiseAccel` 420), `pauseAtZeroTime`, `treadmillCap` (200), `boostSpeed` (680),
+`reverseDecel` (2400, the turn's brake), `pauseAtZeroTime`, `treadmillCap` (200), `boostSpeed` (680),
 `boostAccel` (1600), `brakeWindow` (0.18), `jumpForce` (-480), `deckGrip` (1200, carry → deck speed),
 `duckBounce` (260),
 `trampReturn` (0.9), `trampPump` (1.25).
-Combat / walls: `attackThreshold` (0.5), `spinAttackCost` (0.45), `wallSlideSpeed` (120),
+Turning and spraying cost no speed: a turn takes ~0.2s and pays the stored speed back the new way
+(never under cruise); a spray is free apart from its cooldown. `?turn=old` and `?spray=kick|cost`
+in the URL switch to the alternatives to feel them (`reverseAccel`, `spinAttackKick`, `spinAttackCost`).
+Combat / walls: `attackThreshold` (0.5), `wallSlideSpeed` (120),
 `wallJumpForceY` (-440), `wallJumpPushX` (300), `revClimbSpeed` (280).
 Collision/feel: `stepTolerance` (8, the flat-ground snag guard), `coyoteTime` (0.1),
 `Input.bufferTime` (0.1, the jump buffer). Unicycle sway:

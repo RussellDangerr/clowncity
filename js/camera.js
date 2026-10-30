@@ -38,7 +38,7 @@ const Camera = {
 
     // Clamp to level bounds (a loop level has no ends in x)
     if (!Level.wrap) this.targetX = Math.max(0, Math.min(this.targetX, Level.levelWidth - Engine.width));
-    this.targetY = Math.max(0, Math.min(this.targetY, Level.levelHeight - Engine.height));
+    this.targetY = Math.max(-Level.headroom, Math.min(this.targetY, Level.levelHeight - Engine.height));
 
     // Smooth interpolation
     const k = (f ? this.focusSmoothing : this.smoothing) * dt;
@@ -73,7 +73,7 @@ const Camera = {
     const travelDir = Player.travelDir || 1;
     let tx = px + travelDir * this.lookaheadX - Engine.width / 2;
     if (!Level.wrap) tx = Math.max(0, Math.min(tx, Level.levelWidth - Engine.width));
-    const ty = Math.max(0, Math.min(py - Engine.height / 2, Level.levelHeight - Engine.height));
+    const ty = Math.max(-Level.headroom, Math.min(py - Engine.height / 2, Level.levelHeight - Engine.height));
     this.snapTo(tx, ty);
   }
 };

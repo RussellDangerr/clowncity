@@ -265,8 +265,10 @@
           if (inPen) {
             // The gallery: turn at the walls, spray in between (no sandbox:
             // knocking the last duck rebuilds tiles).
-            const ahead = Math.floor((Player.x + Player.w / 2 + Player.travelDir * 40) / T());
-            if (Player.runState !== 'brake' && Level._tileGrid[ahead + ',21']) { act.swipe(-Player.travelDir); return 'turn (pen wall)'; }
+            // Two reaches: pressed up against the bridge, 40px is already past its one-tile wall.
+            const wallAt = (d) => Level._tileGrid[Math.floor((Player.x + Player.w / 2 + Player.travelDir * d) / T()) + ',21'];
+            if (Player.runState === 'brake') return null;    // a press your own way now would cancel the turn
+            if (Player.grounded && (wallAt(40) || wallAt(16))) { act.swipe(-Player.travelDir); return 'turn (pen wall)'; }
             if (Game.levelTimer - lastSpray > 0.4 && Player.momentum >= Player.attackThreshold) { act.swipe(Player.travelDir); lastSpray = Game.levelTimer; return 'spray'; }
             return null;
           }
@@ -285,6 +287,8 @@
           if (Level._tileGrid[wallCol + ',' + Math.floor((Player.y + Player.h - 8) / T())]) { act.jump(); return 'jump (wall)'; }
           if (ctx.frame % 4) return null;            // rolling along: look ahead every 4th frame
           if (survives(null)) return null;
+          // Coming back from a wait, the far edge of a bank: never go back over the river.
+          if (Player.travelDir < 0) { if (Player.runState !== 'brake') act.swipe(1); return 'turn (back to the river)'; }
           // About to go in (a bank edge, a patrol): a jump that comes through.
           const w = ctx.centred(act.jump, () => survives(act.jump), 0.5, ctx.comfy);
           if (w !== null) return ['jump', w];
@@ -292,7 +296,7 @@
           if (Game.levelTimer < waitingUntil) return null;
           waitingUntil = Game.levelTimer + 1.0;
           act.swipe(-Player.travelDir);
-          ctx.after(0.5, () => act.swipe(-Player.travelDir));
+          ctx.after(0.5, () => act.swipe(1));
           return 'turn to wait';
         },
       };

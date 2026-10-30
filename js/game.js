@@ -15,6 +15,7 @@ const Game = {
   totalDeaths: 0,
   totalGems: 0,
   objectiveTimer: 0,       // the level's goal line shows while > 0 (start of level, or bumping a lock)
+  objective: null,         // the goal line now: the map's, then each of its `lessons` on the way past
 
   // Save data, one record per level NAME, so levels can be added, merged and
   // reordered without scrambling anyone's progress. A level you've retired
@@ -141,7 +142,8 @@ const Game = {
     Player.spawn(Level.spawnX, Level.spawnY);
     Player.deathCount = 0;
     this.levelTimer = 0;
-    this.objectiveTimer = Level.maps[index].objective ? 6 : 0;
+    this.objective = Level.maps[index].objective;
+    this.objectiveTimer = this.objective ? 6 : 0;
     Camera.snapToPlayer();
     // Store total collectibles for save data
     this.levelRecord(index).totalGems = Level.totalCollectibles;
@@ -234,11 +236,14 @@ const Game = {
     // (Level.near: on a loop level, compare against this lap's copy of each.)
     for (const flag of Level.checkpoints) {
       const cp = Level.near(flag);
-      if (!flag.active &&
+      // Once each, so a pass high over an old flag (the Strongman's floors share
+      // columns) never takes him backwards. A loop's flags keep working every lap.
+      if (!flag.active && (Level.wrap || !flag.taken) &&
           Player.x + Player.w > cp.x && Player.x < cp.x + cp.w &&
           Player.y < cp.y + cp.h) {
         for (const other of Level.checkpoints) other.active = false;
         flag.active = true;
+        flag.taken = true;
         Player.setCheckpoint(cp.x, cp.y);
         Particles.burst(cp.x + cp.w / 2, cp.y + cp.h / 2, 12, 100, Tokens.rgba(Tokens.color.goldFlag, 0.7), 0.3);
         Audio.checkpoint();
@@ -318,6 +323,13 @@ const Game = {
         this.state = 'levelComplete';
         this.timer = 0;
         return;
+      }
+    }
+
+    for (const lesson of Level.maps[this.currentLevel].lessons || []) {
+      if (this.objective !== lesson.objective && Player.x >= lesson.col * Level.tileSize) {
+        this.objective = lesson.objective;
+        this.objectiveTimer = 6;
       }
     }
 
@@ -612,7 +624,53 @@ const Game = {
     ctx.fillText(Layout.hint('select'), Engine.width / 2, Engine.height - 40);
   },
 
+  // A loop has no ends to scroll to, so frame it: posts that never move while the
+  // ride goes past between them, and a dial of the whole lap (Poko, gate, rings).
+  _drawLoopFrame(ctx) {
+    const W = Engine.width, H = Engine.height, post = Tokens.space.loopPost;
+    for (const x of [0, W - post]) {
+      const inner = x === 0 ? post : W - post;
+      const shade = ctx.createLinearGradient(inner, 0, inner + (x === 0 ? 28 : -28), 0);
+      shade.addColorStop(0, Tokens.rgba(Tokens.color.overlay, 0.55));
+      shade.addColorStop(1, Tokens.rgba(Tokens.color.overlay, 0));
+      ctx.fillStyle = shade;
+      ctx.fillRect(x === 0 ? post : W - post - 28, 0, 28, H);
+      ctx.fillStyle = Tokens.color.brass;
+      ctx.fillRect(x, 0, post, H);
+      ctx.fillStyle = Tokens.color.tentRed;
+      for (let y = -post; y < H; y += 36) {            // barber-pole stripes
+        ctx.beginPath();
+        ctx.moveTo(x, y + post); ctx.lineTo(x + post, y); ctx.lineTo(x + post, y + 12); ctx.lineTo(x, y + post + 12);
+        ctx.closePath(); ctx.fill();
+      }
+    }
+    const r = 26, cx = W - post - 8 - r, cy = 86;
+    const at = (wx) => {
+      const a = (wx / Level.levelWidth) * Math.PI * 2 - Math.PI / 2;
+      return [cx + Math.cos(a) * r, cy + Math.sin(a) * r];
+    };
+    ctx.fillStyle = Tokens.rgba(Tokens.color.overlay, 0.6);
+    ctx.beginPath(); ctx.arc(cx, cy, r + 5, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = Tokens.color.brass;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+    ctx.lineWidth = 1;
+    const [gx, gy] = at(Level.getGoals()[0].x);
+    ctx.fillStyle = Tokens.rgba(Level.goalLocked ? Tokens.color.dust : Tokens.color.success, 1);
+    ctx.fillRect(gx - 4, gy - 4, 8, 8);
+    ctx.fillStyle = Tokens.rgba(Tokens.color.ring, 1);
+    for (const ring of Level.rings) {
+      if (ring.collected) continue;
+      const [rx, ry] = at(ring.x + ring.w / 2);
+      ctx.beginPath(); ctx.arc(rx, ry, 3.5, 0, Math.PI * 2); ctx.fill();
+    }
+    const [px, py] = at(Player.x + Player.w / 2);
+    ctx.fillStyle = Tokens.color.clownNose;
+    ctx.beginPath(); ctx.arc(px, py, 5, 0, Math.PI * 2); ctx.fill();
+  },
+
   drawHUD(ctx) {
+    if (Level.wrap) this._drawLoopFrame(ctx);
     ctx.textAlign = 'left';
 
     // Level name fade-in with theme accent
@@ -636,7 +694,7 @@ const Game = {
     }
 
     // The level's goal (and how to do the new move), under the name.
-    const objective = Level.maps[this.currentLevel].objective;
+    const objective = this.objective;
     if (objective && this.objectiveTimer > 0) {
       const a = Math.min(1, this.objectiveTimer);
       ctx.textAlign = 'center';
