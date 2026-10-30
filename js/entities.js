@@ -830,50 +830,77 @@ class Strongman {
 
 // ═══════════════════════════════════════════
 // TRAPEZE
-// A bar swinging on ropes from (x, y). Touching it in the air catches it, and
-// Poko hangs on for as long as he likes (Player.swinging). A press lets go the
-// way he's steering: swinging that way adds to the throw, swinging back takes
-// from it. DOWN just drops him.
+// A bar on ropes from (x, y), and a real pendulum: it hangs still until someone
+// flies into it. Poko keeps his momentum: his speed along the swing starts it, and
+// part of the rest of his speed (a fall, say) goes in too, so a faster, steeper
+// catch swings bigger, and flying in the other way swings the other way. Hanging
+// on costs nothing: a swing keeps its energy until he lets go. A press lets go
+// with the bar's real velocity plus a pop; DOWN just drops him.
 // ═══════════════════════════════════════════
 class Trapeze {
-  constructor({ x, y, len, swing, period, phase }) {
+  constructor({ x, y, len, wide }) {
     this.x = x; this.y = y;
     this.len = len || 192;
-    this.swing = swing || 0.6;       // radians either side of straight down
-    this.period = period || 2.4;
-    this.phase = phase || 0;
-    this.t = 0;
+    this.wide = wide || 34;          // px either side of the ropes he can catch from
+    this.rideLen = this.len;         // how far down the rope he is: he slides to the bar
+    this.gravity = 1300;             // px/s^2 — the rise of Poko's own jump, so a swing matches it
+    this.emptyDamp = 0.8;            // 1/s — an empty bar settles back to hanging still
+    this.keepShare = 0.5;            // how much of his speed across the swing goes into it anyway
+    this.popSpeed = 300;             // px/s up on letting go
+    this.angle = 0;                  // radians from straight down, + = forward (right)
+    this.spin = 0;                   // radians/s
     this.cooldown = 0;               // after letting go, so he doesn't catch it again at once
-    this.throwShare = 0.8;           // how much of the bar's speed goes into the throw
-    this.popSpeed = 360;             // px/s up on letting go
     this._place();
   }
 
   _place() {
-    const w = 2 * Math.PI / this.period;
-    this.angle = this.swing * Math.sin(w * this.t + this.phase);
-    this.spin = this.swing * w * Math.cos(w * this.t + this.phase);
     this.barX = this.x + Math.sin(this.angle) * this.len;
     this.barY = this.y + Math.cos(this.angle) * this.len;
   }
 
   update(dt) {
-    this.t += dt;
     if (this.cooldown > 0) this.cooldown -= dt;
+    this.spin -= (this.gravity / this.len) * Math.sin(this.angle) * dt;
+    if (Player.swinging !== this) this.spin -= this.spin * this.emptyDamp * dt;
+    this.angle += this.spin * dt;
     this._place();
-    if (this.cooldown <= 0 && !Player.swinging && !Player.grounded && !Player.dead && !Player.finished && !Player.hauling &&
-        aabb(Player, { x: this.barX - 34, y: this.barY - 48, w: 68, h: 72 })) {
-      Player.swinging = this;
-      Player.parked = false;
-      Player.slamming = false;
-      Player.vx = Player.vy = Player.carry = 0;
-      Player.squash = 0.8;
-      Audio.grab();
-    }
+    this.rideLen = Math.min(this.len, this.rideLen + 500 * dt);
+    if (this.cooldown <= 0 && !Player.swinging && !Player.grounded && !Player.dead && !Player.finished && !Player.hauling && this._touching()) this._catch();
   }
 
-  // Which way the bar is heading in x, and how fast (px/s).
+  // Anywhere on the ropes or the bar: flying in high still catches it.
+  _touching() {
+    const px = Player.x + Player.w / 2, py = Player.y + Player.h / 2;
+    if (py < this.y || py > this.barY + 30) return false;
+    return Math.abs(px - (this.x + Math.tan(this.angle) * (py - this.y))) < this.wide;
+  }
+
+  get riderX() { return this.x + Math.sin(this.angle) * this.rideLen; }
+  get riderY() { return this.y + Math.cos(this.angle) * this.rideLen; }
+
+  // He takes the bar where he meets it, so the rope is at his angle, and his
+  // velocity becomes the swing.
+  _catch() {
+    const dx = Player.x + Player.w / 2 - this.x, dy = Player.y - this.y;
+    this.rideLen = Math.min(this.len, Math.hypot(dx, dy));
+    this.angle = Math.asin(Math.max(-1, Math.min(1, dx / this.rideLen)));
+    const c = Math.cos(this.angle), n = Math.sin(this.angle);
+    const along = Player.vx * c - Player.vy * n;              // his speed along the swing
+    const whole = Math.hypot(Player.vx, Player.vy);
+    const sign = Math.sign(along) || Math.sign(Player.vx) || Player.travelDir;
+    this.spin = sign * (Math.abs(along) + (whole - Math.abs(along)) * this.keepShare) / this.len;
+    this._place();
+    Player.swinging = this;
+    Player.parked = false;
+    Player.slamming = false;
+    Player.vx = Player.vy = Player.carry = 0;
+    Player.squash = 0.8;
+    Audio.grab();
+  }
+
+  // The bar's velocity (px/s).
   get barSpeed() { return Math.cos(this.angle) * this.len * this.spin; }
+  get barRise() { return -Math.sin(this.angle) * this.len * this.spin; }
 
   letGo() {
     this.cooldown = 0.6;
@@ -881,14 +908,14 @@ class Trapeze {
   }
 
   throwPlayer() {
-    const dir = Input.runDir || Player.travelDir;
-    const rise = -Math.sin(this.angle) * this.len * this.spin;        // + = the bar is sinking
+    const vx = this.barSpeed;
+    const dir = Math.sign(vx) || Player.travelDir;
+    const vy = this.barRise - this.popSpeed;
     this.letGo();
+    Input.runDir = dir;
     Object.assign(Player, {
       travelDir: dir, desiredDir: dir, runState: 'cruise', rampT: 1, turnRecover: false,
-      vx: dir * (Player.runSpeed + dir * this.barSpeed * this.throwShare),
-      vy: -this.popSpeed + Math.min(0, rise) * this.throwShare,
-      coyoteTimer: 0, airTop: Player.y, squash: 1.3,
+      vx, vy, coyoteTimer: 0, airTop: Player.y, squash: 1.3,
     });
     Input.consumeJump();
     Audio.jump();
@@ -897,13 +924,13 @@ class Trapeze {
   draw(ctx) {
     ctx.strokeStyle = Tokens.rgba(Tokens.color.dust, 0.7);
     ctx.lineWidth = 2;
-    for (const off of [-16, 16]) {
-      ctx.beginPath(); ctx.moveTo(this.x + off / 2, this.y); ctx.lineTo(this.barX + off, this.barY); ctx.stroke();
+    for (const off of [-1, 1]) {
+      ctx.beginPath(); ctx.moveTo(this.x + off * 8, this.y); ctx.lineTo(this.barX + off * (this.wide - 18), this.barY); ctx.stroke();
     }
     ctx.lineWidth = 1;
     ctx.fillStyle = Tokens.color.brass;
     ctx.fillRect(this.x - 14, this.y - 4, 28, 6);
-    ctx.fillRect(this.barX - 20, this.barY - 2, 40, 5);
+    ctx.fillRect(this.barX - this.wide + 14, this.barY - 2, (this.wide - 14) * 2, 5);
     ctx.fillStyle = Tokens.color.tentRed;
     ctx.fillRect(this.barX - 6, this.barY - 2, 12, 5);
   }
