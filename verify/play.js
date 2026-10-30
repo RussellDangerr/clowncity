@@ -67,6 +67,13 @@
     }
     st.cling = 0;
     if (!Player.grounded) return null;
+    if (Player.trampDrop > 0) return { kind: 'jump', why: 'tramp' };   // pump every trampoline
+    // ...and jump onto any on the floor ahead: only a landing can pump it.
+    for (const e of Entities.list) {
+      if (!(e instanceof Trampoline) || Math.abs(e.y - feetY) > 10) continue;
+      const toBed = dir > 0 ? e.x - front : front - (e.x + e.w);
+      if (toBed > 0 && toBed < 200) return { kind: 'jump', why: 'tramp' };
+    }
 
     // Enemy ahead at roughly our height?
     for (const e of Entities.list) {

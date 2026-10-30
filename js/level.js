@@ -158,19 +158,24 @@ const Level = {
       name: 'The Strongman',
       theme: 'strongman',
       spawn: [3, 41],
-      objective: ['Climb the tower, jump for the hammer, ring the bell!', 'bigJump'],
+      headroom: 160,
+      objective: ['Climb the tower, bounce into the hammer, ring the bell!', 'tramp'],
       entities: [
+        // The lesson, on the ground floor: a jump onto it and a press reaches the gem.
+        { type: 'trampoline', x: 9 * 32, y: 42 * 32 - 8, w: 5 * 32 },
         { type: 'patrol', x: 8 * 32, y: 12 * 32 - 20, range: 64, speed: 55 },   // F3: the shaft-3 exit lands too close for a gap
-        { type: 'patrol', x: 10 * 32, y: 4 * 32 - 20, range: 64, speed: 55 },   // the top, before the hammer
+        // The run-up to the hammer: how high he leaves the top floor is how hard he hits.
+        { type: 'trampoline', x: 13 * 32, y: 4 * 32 - 8, w: 8 * 32 },
         // The high striker. The hammer hangs out past the top of the tower; its
-        // grab box starts just past the top floor's edge, so rolling or jumping
+        // grab box starts just past the top floor's edge, at any height, so going
         // off grabs it and Poko drops straight down the column onto the plate.
-        // Only the jump-off is a big enough drop to ring the bell.
+        // Graded by the height over the top floor: a roll is a weakling, a jump is
+        // not bad, and only a pumped trampoline bounce rings the bell.
         {
           type: 'strongman',
           hammerX: 25 * 32, hammerY: 3 * 32,
-          grab: { x: 22 * 32 + 20, y: 0, w: 6 * 32, h: 6 * 32 },
-          plateX0: 22 * 32, plateX1: 25 * 32, groundY: 42 * 32,
+          grab: { x: 22 * 32 + 20, y: -2000, w: 6 * 32, h: 2000 + 6 * 32 },
+          plateX0: 22 * 32, plateX1: 25 * 32, groundY: 42 * 32, topY: 4 * 32,
           trackX: 30 * 32 + 16, bellY: 3 * 32,
         },
       ],
@@ -234,7 +239,8 @@ const Level = {
       theme: 'pond',
       spawn: [3, 21],
       bot: false,                    // the pit-jumping bot can't read duck rhythm or aim: see the duckRiver check
-      objective: ['Knock down the tin ducks to drop the drawbridge', 'spray'],
+      objective: ['Bounce across on the ducks. The water is deadly!', 'duckHop'],
+      lessons: [{ col: 116, objective: ['Knock down the tin ducks to drop the drawbridge', 'spray'] }],   // a new goal line on the way past
       entities: [
         // Rubber ducks float downstream (+x) at the current's speed. `gaps` is the
         // spacing between ducks, which never changes as they drift: an unpressed
@@ -243,8 +249,9 @@ const Level = {
         // The creek is the lesson: ducks nearly nose to tail, so almost any jump
         // lands on one and the plain hops chain across.
         { type: 'ducks', x0: 14 * 32, x1: 26 * 32, y: 22 * 32 - 2, speed: 120, gaps: [128] },
-        { type: 'ducks', x0: 42 * 32, x1: 74 * 32, y: 22 * 32 - 2, speed: 120, gaps: [144, 144, 296] },
-        { type: 'ducks', x0: 84 * 32, x1: 112 * 32, y: 22 * 32 - 2, speed: 120, gaps: [144, 296] },
+        { type: 'ducks', x0: 42 * 32, x1: 58 * 32, y: 22 * 32 - 2, speed: 120, gaps: [144, 144, 296] },
+        { type: 'ducks', x0: 70 * 32, x1: 83 * 32, y: 22 * 32 - 2, speed: 120, gaps: [144, 296] },
+        { type: 'ducks', x0: 93 * 32, x1: 112 * 32, y: 22 * 32 - 2, speed: 120, gaps: [144, 296] },
         { type: 'patrol', x: 34 * 32, y: 22 * 32 - 20, range: 64, speed: 55 },
         // The shooting gallery: five tin ducks on a rail over the pen. Knock them
         // all down (spray / lunge) and the drawbridge drops.
@@ -255,8 +262,10 @@ const Level = {
       ],
       // 176 wide x 25 tall, flowing left to right. Water (w) is lethal; the ducks
       // in it bounce. Bank -> creek (cols 14-25, one duck hop) -> bank, patrol ->
-      // river (cols 42-73): hop, hop, BIG -> island checkpoint (74-83: room to turn
-      // and come back if the gap is wrong) -> river (84-111): hop, BIG, faster -> the gallery pen (cols 119-136) between a
+      // three rivers (cols 42-57: hop, hop, BIG; 70-82 and 93-111: hop, BIG), each
+      // island between them a checkpoint (58-69, 83-92: wide enough that a big hop
+      // lands on it, and room to turn and come back if the gap is wrong), so a miss
+      // never costs more than one river -> the gallery pen (cols 119-136) between a
       // 2-tall counter (col 118) and the raised drawbridge (u, col 137): turn back
       // and forth spraying the tin ducks -> the bridge lowers (n, row 22, cols
       // 138-157) over the lock -> goal (col 171).
@@ -282,10 +291,10 @@ const Level = {
         '10000000000000000000o00000000000000000000000000000o00000000000o000000000000000000000000000o000000000o000000000000000000000000000000000000u00000000000000000000000000000000000001',
         '10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000u00000000000000000000000000000000000001',
         '10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000000000000000000u00000000000000000000000000000000000001',
-        '1000000000000000000000000000c0o000000000000000000000000000000000000000000000co000000000000000000000000000000000000c00010000000o0000000000u000000000o000000000000c00000o0000g0001',
-        '11111111111111wwwwwwwwwwww1111111111111111wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww1111111111wwwwwwwwwwwwwwwwwwwwwwwwwwww11111111111111111111111111nnnnnnnnnnnnnnnnnnnn111111111111111111',
-        '11111111111111wwwwwwwwwwww1111111111111111wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww1111111111wwwwwwwwwwwwwwwwwwwwwwwwwwww11111111111111111111111111wwwwwwwwwwwwwwwwwwww111111111111111111',
-        '11111111111111wwwwwwwwwwww1111111111111111wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwww1111111111wwwwwwwwwwwwwwwwwwwwwwwwwwww11111111111111111111111111wwwwwwwwwwwwwwwwwwww111111111111111111',
+        '1000000000000000000000000000c0o00000000000000000000000000000c0000000000000000o0000000c0000000000000000000000000000c00010000000o0000000000u000000000o000000000000c00000o0000g0001',
+        '11111111111111wwwwwwwwwwww1111111111111111wwwwwwwwwwwwwwww111111111111wwwwwwwwwwwww1111111111wwwwwwwwwwwwwwwwwww11111111111111111111111111nnnnnnnnnnnnnnnnnnnn111111111111111111',
+        '11111111111111wwwwwwwwwwww1111111111111111wwwwwwwwwwwwwwww111111111111wwwwwwwwwwwww1111111111wwwwwwwwwwwwwwwwwww11111111111111111111111111wwwwwwwwwwwwwwwwwwww111111111111111111',
+        '11111111111111wwwwwwwwwwww1111111111111111wwwwwwwwwwwwwwww111111111111wwwwwwwwwwwww1111111111wwwwwwwwwwwwwwwwwww11111111111111111111111111wwwwwwwwwwwwwwwwwwww111111111111111111',
       ]
     },
     {
@@ -364,17 +373,18 @@ const Level = {
       objective: ['Make the jumps, then the big drop into the tent', 'tramp'],
       entities: [
         // Jump 1: off the start plateau onto the boardwalk. Fall short and the
-        // trampoline under it bounces you back up through the boardwalk (no
-        // press); pumped (a press as you land), it throws you up onto the high
-        // wire, the shortcut over every jump to the final plateau.
+        // trampoline bounces you back up through the boardwalk (no press); pumped
+        // (a press as you land), it throws you up onto the high wire, the shortcut
+        // over every jump to the final plateau. It hangs high enough to see from
+        // the plateau, even in the deck's shorter view.
         { type: 'oneway', x: 22 * 32, y: 12 * 32, w: 29 * 32 },
-        { type: 'trampoline', x: 14 * 32, y: 30 * 32, w: 37 * 32 },
+        { type: 'trampoline', x: 14 * 32, y: 14 * 32, w: 10 * 32, leg: 16 * 32 },
         // A zip line (+200 px/s): the shortcut should feel like one. It ends early
         // so the drop off it lands on the final plateau, not the big ramp.
-        { type: 'oneway', x: 36 * 32, y: 4 * 32, w: 84 * 32, wire: true, carry: 200 },
+        { type: 'oneway', x: 26 * 32, y: 4 * 32, w: 94 * 32, wire: true, carry: 200 },
         // Jump 3: a kicker off ledge 2 onto ledge 3, with a safety trampoline under it.
         { type: 'oneway', x: 88 * 32, y: 18 * 32, w: 28 * 32 },
-        { type: 'trampoline', x: 81 * 32, y: 32 * 32, w: 35 * 32 },
+        { type: 'trampoline', x: 81 * 32, y: 21 * 32, w: 10 * 32, leg: 11 * 32 },
       ],
       // Jump 3's kicker, then the big drop: ONE curved ramp, 16 tiles tall: it
       // leaves the final plateau flat, steepens, bottoms out, then curls into a
@@ -392,7 +402,7 @@ const Level = {
       //   (row 12) -> J2 over pit B (deadly) -> ledge 2 (row 15) -> J3 kicker over
       //   pit C (trampoline, safe) -> ledge 3 (row 18) -> J4 over pit D (deadly)
       //   -> final plateau (row 20) -> the big drop over pit E (deadly) -> tent
-      //   mesa (row 22), goal col 204. The zip line (row 4, cols 36-119) skips
+      //   mesa (row 22), goal col 204. The zip line (row 4, cols 26-119) skips
       //   from pit A's pumped bounce to the final plateau.
       data: [
         '100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001',
@@ -458,6 +468,7 @@ const Level = {
     const map = this.maps[mapIndex];
     const data = map.data;
     this.wrap = !!map.wrap;
+    this.headroom = map.headroom || 0;   // px the camera may rise above row 0 (a big bounce off a top floor)
     this.deckSpeed = map.deckSpeed || 0;
 
     this.levelHeight = data.length * this.tileSize;
