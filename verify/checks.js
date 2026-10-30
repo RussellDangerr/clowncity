@@ -763,12 +763,12 @@
       assert(Player.finished, `after the bridge dropped: finished ${Player.finished}, dead ${Player.dead}, col ${(Player.x / T).toFixed(1)}`);
       return `drowns; bounce ${Player.duckBounce}; 144 chains, 296 needs a press; rivers in ${crossings.join(' + ')} hops; boarding blocked ≤${worstWait.toFixed(2)}s per ${cycle.toFixed(1)}s cycle; ${gallery}; bridge → goal`;
     },
-    // The Strongman: going off the top grabs the hammer, which locks the wheel
-    // and drops Poko straight down; the strike is graded by the height over the
-    // top floor. A roll or a jump falls short and puts him back at the top
-    // checkpoint for another go; a pumped trampoline bounce rings it, the camera
-    // riding up with the puck; the exit is shut until the bell rings. (The bot,
-    // which pumps every trampoline, plays the whole level in allLevels.)
+    // The Strongman: going off the top grabs the hammer; DOWN slams it straight
+    // down, graded by the height he pressed from. Slamming at the top of a pumped
+    // bounce rings the bell and pays out its gem, the camera riding up with the
+    // puck; never pressing is a thud. Whatever happens he ends up standing by the
+    // plate: right is the open exit, left flings him back to the top with the hammer
+    // re-hung. (The bot plays the whole level in allLevels.)
     async strongman() {
       const i = Level.maps.findIndex(m => m.name === 'The Strongman');
       const T = Level.tileSize, run = Player.runSpeed;
@@ -778,61 +778,144 @@
         Player.spawn(x, y, 0.01); Player.respawning = false;
         Object.assign(Player, { vx: run, runState: 'cruise', rampT: 1 });
       };
-      // Off the top heading for the hammer; jump at x (or roll off if null), and
-      // press as he lands on the trampoline if pump. Steps until the machine
-      // settles; reports what happened.
-      const goFor = (jumpAt, pump) => {
+      // Off the top heading for the hammer; jump at x (or roll off if null), press
+      // as he lands on the trampoline if pump, and slam: 'now' as soon as he has the
+      // hammer, 'top' at the top of the arc, 'late' well into the fall, or not at
+      // all. Steps until the machine settles; reports what happened.
+      const goFor = (jumpAt, pump, slam = 'top') => {
         fresh();
         Player.setCheckpoint(6 * T, 3 * T);                 // as if he passed the top flag
         cruising(jumpAt === null ? 21.5 * T : 6 * T, 3 * T);
         const sm = machine();
-        let grabX = null, maxDrift = 0, camTop = Infinity, jumped = jumpAt === null;
-        for (let f = 0; f < 120 * 12 && sm.state !== 'done' && !(grabX !== null && sm.state === 'hanging'); f++) {
+        let grabX = null, slamX = null, maxDrift = 0, camTop = Infinity, jumped = jumpAt === null;
+        for (let f = 0; f < 120 * 12 && sm.state !== 'open'; f++) {
           if (!jumped && Player.x >= jumpAt) { Input.tapKey('Space'); jumped = true; }
           if (pump && Player.trampDrop > 0) Input.tapKey('Space');
+          if (Player.hauling && Player.slamFrom === null && (slam === 'now' || (slam === 'top' && Player.vy >= 0) ||
+              (slam === 'late' && Player.y > 8 * T))) Input.tapKey('ArrowDown');
           step(Engine.fixedDt);
           if (sm.state === 'carried') {
             if (grabX === null) grabX = Player.x;
-            maxDrift = Math.max(maxDrift, Math.abs(Player.x - grabX));
-            assert(Player.vx === 0, `the wheel should lock while hauling (vx ${Player.vx})`);
+            if (Player.slamFrom !== null) {
+              if (slamX === null) slamX = Player.x;
+              maxDrift = Math.max(maxDrift, Math.abs(Player.x - slamX));
+            }
           }
           if (sm.state === 'flight') camTop = Math.min(camTop, Camera.y);
         }
         return { sm, grabX, maxDrift, camTop };
       };
 
-      // 1) Roll off with no input: grabs, drops straight, a weak hit, and Poko is
-      //    put back at the top checkpoint.
-      const roll = goFor(null);
+      // 1) Roll off and slam at once: grabs, drops straight, a weak hit, and Poko
+      //    stands by the plate.
+      const roll = goFor(null, false, 'now');
       assert(roll.grabX !== null, 'rolling off the top never grabbed the hammer');
       assert(roll.maxDrift < 1, `the hammer drop should be straight down (drifted ${roll.maxDrift.toFixed(1)}px)`);
       assert(!Level.bellRung, `rolling off shouldn't ring the bell (puck top ${roll.sm.puckTop.toFixed(0)}, bell ${roll.sm.bellBottom})`);
-      assert(roll.sm.state === 'hanging' && !Player.hauling && Player.y < 5 * T, `after a weak hit Poko should be back at the top with the hammer on its hook (state ${roll.sm.state}, row ${(Player.y / T).toFixed(1)})`);
+      assert(roll.sm.state === 'open' && !Player.hauling && Player.parked, `after a weak hit Poko should stand by the plate (state ${roll.sm.state}, parked ${Player.parked})`);
+      const rollHeight = roll.sm.puckRest - roll.sm.puckTop;
+      // Left at the tower wall: flung back to the top floor, the hammer on its hook.
+      Input.tapKey('ArrowLeft');
+      for (let f = 0; f < 120 * 4 && !(roll.sm.state === 'hanging' && !Player.flung); f++) step(Engine.fixedDt);
+      assert(roll.sm.state === 'hanging' && !Player.dead && Math.abs(Player.y + Player.h - 4 * T) < 12, `going left should fling him to the top with the hammer back (state ${roll.sm.state}, row ${(Player.y / T).toFixed(1)})`);
+      for (let f = 0; f < 60; f++) step(Engine.fixedDt);
+      assert(!Player.dead && Player.vx > 300 && Math.abs(Player.y + Player.h - 4 * T) < 12, `he should roll on along the top floor (vx ${Player.vx.toFixed(0)}, row ${(Player.y / T).toFixed(1)})`);
 
-      // 1b) The grades: each way of going off the top hits harder than the last,
-      //     and only the pumped bounce rings.
+      // 1b) The grades: higher is harder, only the pumped bounce rings, pressing
+      //     late throws height away, and never pressing doesn't swing at all.
       const height = (r) => r.sm.puckRest - r.sm.puckTop;
-      const jumpOff = goFor(21 * T, false);
-      assert(!Level.bellRung, 'a plain jump off the top should not ring the bell');
-      assert(height(jumpOff) > height(roll) + 200, `a jump should hit clearly harder than a roll (${height(jumpOff).toFixed(0)} vs ${height(roll).toFixed(0)})`);
+      const jumpOff = goFor(11 * T, false);          // jump, unpressed bounce, slam at the top of it
+      assert(!Level.bellRung, 'an unpressed bounce should not ring the bell');
+      assert(height(jumpOff) > rollHeight + 200, `a bounce should hit clearly harder than a roll (${height(jumpOff).toFixed(0)} vs ${rollHeight.toFixed(0)})`);
+      const late = goFor(11 * T, false, 'late');
+      assert(height(late) < rollHeight, `a late slam should be weaker than slamming at the edge (${height(late).toFixed(0)} vs ${rollHeight.toFixed(0)})`);
+      const never = goFor(11 * T, false, null);
+      assert(!Level.bellRung && never.sm.puckTop === never.sm.puckRest, 'never pressing down should not launch the puck');
 
       // 2) Jump onto the trampoline and press as you land: rings, with the camera
       //    riding up to the bell. Any jump that lands on the bed works.
       let rang = 0, camTop = Infinity, ringTop = null;
-      const takeoffs = [7, 8, 9, 10, 11];
+      const takeoffs = [8, 9, 10, 11, 12];
       for (const col of takeoffs) {
         const r = goFor(col * T, true);
-        if (Level.bellRung && r.sm.state === 'done') { rang++; camTop = Math.min(camTop, r.camTop); ringTop = r.sm.puckTop; }
+        if (Level.bellRung && r.sm.state === 'open') { rang++; camTop = Math.min(camTop, r.camTop); ringTop = r.sm.puckTop; }
       }
       assert(rang === takeoffs.length, `a pumped trampoline bounce should ring every time (rang ${rang}/${takeoffs.length})`);
+      assert(Level.collectibles.some(g => g.collected && g.y < machine().bellY), 'the bell should pay out its gem');
       assert(camTop < machine().bellY + 200, `the camera should ride up to the bell (got to y ${camTop.toFixed(0)})`);
 
-      // 3) The exit is shut until the bell rings.
+      // 3) The exit is open without the bell.
       const goal = Level.getGoals()[0];
       fresh(); cruising(goal.x - 6 * T, 41 * T);
       for (let f = 0; f < 120 && !Player.finished; f++) step(Engine.fixedDt);
-      assert(!Player.finished, 'the exit opened before the bell rang');
-      return `puck height roll ${height(roll).toFixed(0)}, jump ${height(jumpOff).toFixed(0)}, no ring, back at the top; pumped bounce rings ${rang}/${takeoffs.length}; camera reached y ${camTop.toFixed(0)}; exit locked till the ding`;
+      assert(Player.finished, 'the exit should be open without ringing the bell');
+      return `puck height late ${height(late).toFixed(0)}, roll ${rollHeight.toFixed(0)}, jump ${height(jumpOff).toFixed(0)}, no ring, back at the top; left flings him back up; pumped bounce rings ${rang}/${takeoffs.length} and pays its gem; camera reached y ${camTop.toFixed(0)}; exit open without the bell`;
+    },
+    // DOWN stops the wheel dead; a steer rolls on. On the ground he stays put and
+    // can hop straight up; in the air he drops straight down; the spray kills;
+    // a duck or the carousel deck keeps carrying him.
+    async stopDead() {
+      const T = Level.tileSize;
+      const cruise = (i, col, row) => {
+        play(i); cleanInput();
+        Entities.list = Entities.list.filter(e => !(e instanceof PatrolEnemy));
+        Player.spawn(col * T, row * T, 0.01); Player.respawning = false;
+        Object.assign(Player, { vx: Player.runSpeed, runState: 'cruise', rampT: 1 });
+      };
+      cruise(0, 4, 21); step(0.2);
+      Input.tapKey('ArrowDown'); step(0.1);
+      assert(Player.parked && Player.vx === 0, `down should stop the wheel (vx ${Player.vx})`);
+      let x = Player.x;
+      step(1);
+      assert(Player.x === x, `a stopped Poko should stay put (moved ${(Player.x - x).toFixed(1)}px)`);
+      Input.tapKey('Space'); step(0.2);
+      assert(!Player.grounded && Player.x === x, 'a stopped Poko should hop straight up');
+      step(1);
+      Input.tapKey('ArrowRight'); step(0.8);
+      assert(!Player.parked && Math.abs(Player.vx - Player.runSpeed) < 1, `a steer should roll him on (vx ${Player.vx.toFixed(0)})`);
+      Input.tapKey('ArrowDown'); step(0.1);
+      Input.tapKey('ArrowLeft'); step(0.2);
+      assert(Player.travelDir === -1 && Player.vx < -100, `steering the other way from a stop should go that way (vx ${Player.vx.toFixed(0)})`);
+
+      cruise(0, 4, 21); step(0.2);
+      Input.tapKey('Space'); step(0.2);
+      x = Player.x;
+      Input.tapKey('ArrowDown');
+      let t = 0;
+      for (; t < 2 && !Player.grounded; t += Engine.fixedDt) step(Engine.fixedDt);
+      assert(Player.grounded && Math.abs(Player.x - x) < 8, `a slam should drop straight down (drifted ${(Player.x - x).toFixed(1)}px)`);
+
+      // The confetti kills what's beside him.
+      play(0); cleanInput();
+      const patrol = Entities.list.find(e => e instanceof PatrolEnemy);
+      Entities.list = Entities.list.filter(e => e === patrol);
+      const r = patrol.getHazardRect();
+      Player.spawn(r.x - 70, r.y + r.h - Player.h, 0.01); Player.respawning = false;
+      step(0.05);
+      Input.tapKey('ArrowDown');
+      for (let f = 0; f < 60 && !patrol.dead; f++) step(Engine.fixedDt);
+      assert(patrol.dead && !Player.dead, `the down spray should kill a patrol beside him (killed ${patrol.dead}, Poko dead ${Player.dead})`);
+
+      // A duck carries a stopped Poko; so does the deck.
+      const duck = Level.maps.findIndex(m => m.name === 'The Duck River');
+      play(duck); cleanInput(); step(0.1);
+      const s = Entities.list.filter(e => e instanceof DuckStream)[1];
+      const d = s.ducks.reduce((a, o) => (o.x < a.x ? o : a));
+      Player.spawn(d.x + 12, s._bobY(d) - Player.h - 2, 0.01); Player.respawning = false;
+      Object.assign(Player, { vy: 120, carry: s.speed });
+      Input.tapKey('ArrowDown'); step(1);
+      assert(!Player.dead && Player.x + Player.w > d.x && Player.x < d.x + s.w, `a stopped Poko should ride his duck (Poko ${Player.x.toFixed(0)}, duck ${d.x.toFixed(0)})`);
+      const carousel = Level.maps.findIndex(m => m.name === 'The Carousel');
+      cruise(carousel, 40, 21); step(0.3);
+      Input.tapKey('ArrowDown'); step(0.3);
+      x = Player.x; step(1);
+      assert(Math.abs(Player.x - x - Level.deckSpeed) < 2, `the deck should carry a stopped Poko (${(Player.x - x).toFixed(0)}px/s)`);
+
+      // The deck's button is the same press.
+      cruise(0, 4, 21); step(0.2);
+      press(document.getElementById('btn-down'));
+      assert(Player.parked, 'the deck button should stop him');
+      return 'stops, stays, hops straight up, rolls either way; slam drops straight; spray kills; rides a duck and the deck; deck button works';
     },
     // Saves are keyed by level name. An old save (arrays by position, as v0.4–v0.6
     // write it) moves onto names once and is rewritten in the new format; a
@@ -888,11 +971,10 @@
       }
       return out.join(' · ');
     },
-    // The Big Drop's jumps: falling short at jump 1 lands on a trampoline that
-    // bounces Poko back up onto the boardwalk; pumping it reaches the zip line,
-    // whose ride ends on the final plateau and (with the press at the big ramp)
-    // in the tent; jump 3's net puts him on ledge 3; and a fall at jump 4 only
-    // costs jump 4 (he respawns at ledge 3's checkpoint).
+    // The Big Drop's jumps: falling short at jump 1 or 3 bounces Poko back up onto
+    // the next ledge; every pit is a net or water with nothing to get stuck on; a
+    // trapeze holds him until he lets go, and a forward swing throws him across;
+    // a fall at jump 4 only costs jump 4; and the whole level ends in the tent.
     async bigDropJumps() {
       const i = Level.maps.findIndex(m => m.name === 'The Big Drop');
       const T = Level.tileSize;
@@ -902,48 +984,81 @@
         Object.assign(Player, { vx: Player.runSpeed, runState: 'cruise', rampT: 1 });
       };
       const feetRow = () => (Player.y + Player.h) / T;
-      // Run until the first landing after a trampoline bounce (pressing at the bounce if asked).
-      const afterBounce = (press) => {
+      const afterBounce = () => {
         let bounced = false;
         for (let f = 0; f < 600; f++) {
           step(Engine.fixedDt);
           if (Player.dead) return 'died';
-          if (!bounced && Player.grounded && Player.trampDrop > 0) { bounced = true; if (press) Input.tapKey('Space'); continue; }
+          if (!bounced && Player.grounded && Player.trampDrop > 0) { bounced = true; continue; }
           if (bounced && Player.grounded && Player.vy >= 0) return feetRow();
         }
         return 'timeout';
       };
       cruise(8, 7);
-      const fallJ1 = afterBounce(false);
-      assert(fallJ1 === 12, `falling short at jump 1 should bounce him onto the boardwalk (row 12), got ${fallJ1}`);
-      cruise(8, 7);
-      const pumpJ1 = afterBounce(true);
-      assert(pumpJ1 === 4, `a pumped bounce at jump 1 should reach the zip line (row 4), got ${pumpJ1}`);
+      const fallJ1 = afterBounce();
+      assert(fallJ1 === 12, `falling short at jump 1 should bounce him onto ledge 1 (row 12), got ${fallJ1}`);
       cruise(82, 14);
-      const fallJ3 = afterBounce(false);
+      const fallJ3 = afterBounce();
       assert(fallJ3 === 18, `falling into jump 3's pit should bounce him onto ledge 3 (row 18), got ${fallJ3}`);
-
-      // The whole shortcut: pump at jump 1, zip, drop to the final plateau, press on the big ramp.
-      cruise(8, 7);
-      let pumped = false, pressed = false, plateau = null, made = false;
-      for (let f = 0; f < 120 * 30 && !made && !Player.dead; f++) {
-        if (!pumped && Player.grounded && Player.trampDrop > 0) { Input.tapKey('Space'); pumped = true; }
-        if (!plateau && Player.grounded && Math.abs(feetRow() - 20) < 0.05) plateau = Player.x / T;
-        if (!pressed && Player.grounded && Player.x > 158 * T) { Input.tapKey('Space'); pressed = true; }
-        step(Engine.fixedDt);
-        made = Game.state === 'tentFinale' || Game.state === 'levelComplete';
+      const net = () => Entities.list.filter(e => e instanceof Trampoline);
+      for (const n of net()) {
+        const col = Math.floor(n.x / T), row = Math.floor(n.y / T) + 1;
+        assert(Level._isSolid(row, col), `the net at col ${col} should have solid right under it`);
       }
-      const shortcutTime = Game.levelTimer;
-      assert(plateau !== null && plateau < 145, `the zip line should drop him on the final plateau (cols 124-145), landed at ${plateau && plateau.toFixed(1)}`);
-      assert(made, `the shortcut should end in the tent (dead ${Player.dead})`);
 
-      // Jump 4: pass ledge 3's flag, fall in pit D, come back at ledge 3.
+      // Rolling off each ledge ends in a net's bounce or in water, never on a floor.
+      for (const [col, row] of [[46, 11], [94, 17]]) {
+        cruise(col, row);
+        for (let f = 0; f < 240 && !Player.dead; f++) step(Engine.fixedDt);
+        assert(Player.dead, `rolling off the ledge at col ${col} should end in the water (row ${feetRow().toFixed(1)})`);
+      }
+
+      // The trapeze: catch from a jump, hang on, throw across from the forward swing.
+      const bars = () => Entities.list.filter(e => e instanceof Trapeze);
+      const trial = (ledgeCol, ledgeRow, farRow, delay, barIndex) => {
+        cruise(ledgeCol, ledgeRow);
+        Entities.update(0);
+        for (const b of bars()) { b.t = delay; b._place(); }
+        let jumped = false, caught = false;
+        const edge = barIndex === 0 ? 51 : 99;
+        for (let f = 0; f < 120 * 6; f++) {
+          if (!jumped && Player.x + Player.w >= (edge - 1.5) * T) { Input.tapKey('Space'); jumped = true; }
+          if (Player.swinging) {
+            caught = true;
+            if (Player.swinging.barSpeed > 150) Input.tapKey('Space');
+          }
+          step(Engine.fixedDt);
+          if (Player.dead) return { caught, end: 'drowned' };
+          if (Player.grounded && jumped && !Player.trampDrop && Player.x > edge * T) return { caught, end: feetRow() };
+          if (Player.grounded && Player.x > edge * T + 800) break;
+        }
+        return { caught, end: 'timeout' };
+      };
+      const N = 12;
+      let caught = 0, across = 0;
+      for (let k = 0; k < N; k++) {
+        const r = trial(44, 11, 15, 2.4 * k / N, 0);
+        if (r.caught) caught++;
+        if (r.end === 15) across++;
+      }
+      assert(caught >= N * 0.75, `a jump off ledge 1 should catch the trapeze at most moments (${caught}/${N})`);
+      assert(across >= N * 0.75, `a forward release should reach ledge 2 (${across}/${N})`);
+
+      // Hanging on is safe, for as long as you like.
+      cruise(44, 11);
+      for (let f = 0; f < 120 * 8 && !Player.swinging && !Player.dead; f++) {
+        if (Player.x + Player.w >= 49.5 * T && Player.grounded) Input.tapKey('Space');
+        step(Engine.fixedDt);
+      }
+      if (Player.swinging) { step(6); assert(Player.swinging && !Player.dead, 'hanging on should be safe'); }
+
+      // Jump 4: pass ledge 3's flag, fall in, come back at ledge 3.
       cruise(90, 17);
-      for (let f = 0; f < 600 && !Player.dead; f++) step(Engine.fixedDt);          // rolls off ledge 3 into pit D
-      assert(Player.dead, 'rolling off ledge 3 with no jump should fall into pit D');
+      for (let f = 0; f < 600 && !Player.dead; f++) step(Engine.fixedDt);
+      assert(Player.dead, 'rolling off ledge 3 with no jump should fall in the water');
       for (let f = 0; f < 120 && Player.dead; f++) step(Engine.fixedDt);
-      assert(Math.abs(Player.x - 92 * T) < T && Math.abs(feetRow() - 18) < 1.5, `a fall at jump 4 should respawn at ledge 3's checkpoint (col 92), got col ${(Player.x / T).toFixed(1)}, row ${feetRow().toFixed(1)}`);
-      return `short at J1 → boardwalk; pumped → zip line; J3 net → ledge 3; shortcut to the tent in ${shortcutTime.toFixed(1)}s; J4 fall → back at J4`;
+      assert(Math.abs(Player.x - 92 * T) < T, `should respawn at ledge 3's flag (col ${(Player.x / T).toFixed(1)})`);
+      return `nets bounce back to rows 12 and 18; no floors to get stuck on; trapeze caught ${caught}/${N}, forward throw across ${across}/${N}; J4 fall → back at J4`;
     },
     // ── checks added by later tasks go here, in task order ──
   };

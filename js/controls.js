@@ -10,6 +10,7 @@ const Controls = {
   init() {
     this._bindHold('btn-left', 'ArrowLeft');
     this._bindHold('btn-right', 'ArrowRight');
+    this._bindHold('btn-down', 'ArrowDown');
     this._bindHold('btn-jump', 'Space');
     this._bindHold('btn-pause', 'Escape');
     this._bindTap('pause-btn', 'Escape');

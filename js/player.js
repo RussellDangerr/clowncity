@@ -54,6 +54,7 @@ const Player = {
   attackThreshold: 0.5,     // momentum (0..1) needed to spin out an attack
   spinAttackCost: 0.45,     // fraction of speed spent on a spin-out ('cost' spray only)
   spinAttackKick: 120,      // px/s added by a spin-out ('kick' spray only)
+  slamSpeed: 420,           // px/s — pressing down in the air starts the drop at least this fast
   spinAttackWindow: 0.16,   // hitbox lifetime
   spinAttackCooldown: 0.22, // min seconds between spin-outs
 
@@ -132,6 +133,11 @@ const Player = {
   attackDir: 0,           // wheel-throw direction (= old travelDir); 0 = inactive
   turnRecover: false,     // just turned: re-earn speed at reverseAccel until back at cruise
   slingSpeed: 0,          // speed the brake stored, paid back the new way (a slingshot turn)
+  parked: false,          // pressed down: the wheel holds still until the next steer (a moving deck still carries him)
+  slamming: false,        // pressed down in the air, not landed yet
+  slamFrom: null,         // holding the hammer: feet height when he pressed down (null = hasn't)
+  swinging: null,         // the Trapeze he's hanging from
+  flung: false,           // being thrown back up the tower: the Strongman flies him
   lipLoaded: false,      // a jump pressed on a kicker, waiting to fire at the lip
   lipGraceTimer: 0,       // counts down after flying off a launcher's lip (a late press still pops)
 
@@ -184,7 +190,7 @@ const Player = {
   checkpointX: 0,
   checkpointY: 0,
   finished: false,          // reached the goal: coasting to a stop, input ignored
-  hauling: false,           // holding the Strongman's hammer: wheel locked, input ignored, drops straight down
+  hauling: false,           // holding the Strongman's hammer: too heavy to steer, only DOWN works (a slam)
   trampDrop: 0,             // height of the fall a trampoline just answered (this frame only): a press pumps it
   airTop: 0,                // highest point (min y) since last on the ground: a landing's drop height is y − airTop
   hidden: false,            // swallowed by the tent (Big Drop finale): not drawn or updated
@@ -268,6 +274,11 @@ const Player = {
     this.dead = false;
     this.finished = false;
     this.hauling = false;
+    this.parked = false;
+    this.slamming = false;
+    this.slamFrom = null;
+    this.swinging = null;
+    this.flung = false;
     this.airTop = y;
     this.hidden = false;
     this.deathTimer = 0;
@@ -332,15 +343,38 @@ const Player = {
     this.updateAnim(dt);
   },
 
-  // Holding the hammer: it's too heavy to pedal, so the wheel locks and Poko
-  // drops straight down under gravity. airTop keeps tracking the top of the
-  // fall until he lands, so whatever reads the landing gets the full drop.
+  // Hanging from a trapeze: he goes where the bar goes until he lets go.
+  _swing(dt) {
+    const bar = this.swinging;
+    this.x = bar.barX - this.w / 2;
+    this.y = bar.barY - 4;
+    this.grounded = false;
+    this.wasGrounded = false;
+    this.lean = -bar.angle;
+    this.wheelAngle += bar.spin * 2 * dt;
+    this.squash += (1 - this.squash) * 14 * dt;
+    this.setAnim('fall');
+    if (Input.downPressed()) { bar.letGo(); this._stopDead(); }
+    else if (Input.jumpBuffered()) bar.throwPlayer();
+  },
+
+  // Holding the hammer: it's too heavy to steer, so he sails on until DOWN
+  // brings it down, straight from wherever he is. slamFrom remembers how high
+  // that was, which is what the Strongman grades.
   _haul(dt) {
     this.wasGrounded = this.grounded;
-    this.vx = 0;
     this.carry = 0;
+    if (Input.downPressed() && this.slamFrom === null) {
+      this.slamFrom = this.y + this.h;
+      this.vx = 0;
+      this.vy = Math.max(this.vy, this.slamSpeed);
+      this.squash = 1.3;
+      Audio.bounce();
+      this._downSpray();
+    }
     const grav = this.vy < 0 ? this.gravityUp : this.gravityDown;
     this.vy = Math.min(this.vy + grav * dt, this.maxFallSpeed);
+    this.x += this.vx * dt;
     this.y += this.vy * dt;
     this.resolveCollisions();
     if (!this.grounded) this.airTop = Math.min(this.airTop, this.y);
@@ -399,6 +433,18 @@ const Player = {
       return;
     }
 
+    if (this.flung) {
+      this.wheelAngle += 30 * dt;
+      this.setAnim('jump');
+      return;
+    }
+
+    // ── Hanging from a trapeze ──
+    if (this.swinging) {
+      this._swing(dt);
+      return;
+    }
+
     // ── Hauling the hammer: the Strongman entity grabs and releases ──
     if (this.hauling) {
       this._haul(dt);
@@ -413,6 +459,15 @@ const Player = {
       }
     }
 
+    // ── Down: stop dead (the next steer rolls him on) ──
+    if (this.slamming && this.grounded) this._slamLanded();
+    if (Input.downPressed()) this._stopDead();
+    else if (this.parked) {
+      const steer = Input.swipeEdge() ||
+        (Input.pressed('ArrowRight') || Input.pressed('KeyD') ? 1 : Input.pressed('ArrowLeft') || Input.pressed('KeyA') ? -1 : 0);
+      if (steer) this._rollOn(steer);
+    }
+
     // ── Steer intent (sticky) + jump (tap / keyboard) ──
     const wantDir = Input.runDir;
     const jumpBuffered = Input.jumpBuffered();
@@ -420,7 +475,7 @@ const Player = {
     // Reversal: a steer against committed travel starts a weighty turnaround.
     // The wheel "kicks" out in the OLD direction (attackDir) as a braking
     // lunge — and that lunge is the attack hitbox (see getAttackRect).
-    if (wantDir !== 0 && wantDir !== this.travelDir && this.runState !== 'brake' && this.wallJumpLockTimer <= 0 &&
+    if (!this.parked && wantDir !== 0 && wantDir !== this.travelDir && this.runState !== 'brake' && this.wallJumpLockTimer <= 0 &&
         !(this.wallSliding && wantDir === -this.wallContactDir)) {   // steering off a wall = wall-jump, not a brake
       this.runState = 'brake';
       this.brakeTimer = this.brakeWindow;
@@ -438,7 +493,9 @@ const Player = {
     const onTreadmill = this.grounded && this.groundMaterial === 'treadmill';
     const onBoost = this.grounded && this.groundMaterial === 'boost';
 
-    if (this.runState === 'ramp') {
+    if (this.parked) {
+      this.vx = 0;
+    } else if (this.runState === 'ramp') {
       // Level start (slow, a beat to settle in) or respawn (quick): ease from a
       // standstill up to full speed.
       this.rampT = Math.min(1, this.rampT + dt / this.rampTime);
@@ -493,7 +550,7 @@ const Player = {
     // Boost belt: drive up to boostSpeed whichever way he's rolling (never slows
     // him — already faster stays faster). Off the belt the overspeed is the usual
     // kind: kept in the air, so jumping off the end carries it.
-    if (onBoost && this.runState !== 'brake' && this.vx * this.travelDir < this.boostSpeed) {
+    if (onBoost && !this.parked && this.runState !== 'brake' && this.vx * this.travelDir < this.boostSpeed) {
       this.vx = approach(this.vx, this.travelDir * this.boostSpeed, this.boostAccel * dt);
     }
 
@@ -541,7 +598,7 @@ const Player = {
     // wallDir/grounded here are from LAST frame's resolveCollisions (the same
     // one-frame-late model coyote uses). Cling when airborne, touching a wall,
     // and steering INTO it (travelDir === wallDir).
-    const onWall = !this.grounded && this.wallDir !== 0 && this.travelDir === this.wallDir;
+    const onWall = !this.parked && !this.grounded && this.wallDir !== 0 && this.travelDir === this.wallDir;
     if (onWall) {
       this.wallStickTimer = this.wallStickTime;   // refresh wall-coyote
       this.wallContactDir = this.wallDir;
@@ -585,7 +642,7 @@ const Player = {
     // launcher, jump always means "spring at the lip": early or mashed presses
     // still get the full launch instead of a hop off the drop.
     const onLauncher = this.ramp && this.ramp.lip === this.travelDir;
-    const climbing = this.grounded && this.onSlope &&
+    const climbing = !this.parked && this.grounded && this.onSlope &&
       (Math.sign(this.vx) * this.surfaceSlope < this.lipLoadSlope || onLauncher);
     if (this.lipLoaded && !climbing) {
       this.lipLoaded = false;
@@ -1096,6 +1153,46 @@ const Player = {
     return null;
   },
 
+  // Stop dead: all the wheel's speed goes into a spray of confetti. In the air
+  // that's a slam, straight down from here.
+  _stopDead() {
+    this.parked = true;
+    this.vx = 0;
+    this.runState = 'cruise';
+    this.turnRecover = false;
+    this.attackDir = 0;
+    this.lipLoaded = false;
+    this.squash = 1.3;
+    if (!this.grounded) {
+      this.slamming = true;
+      this.vy = Math.max(this.vy, this.slamSpeed);
+    }
+    if (this._spinCooldown <= 0) {
+      this._spinCooldown = this.spinAttackCooldown;
+      Camera.shake(2);
+      Audio.bounce();
+      this._downSpray();
+    }
+  },
+
+  _rollOn(dir) {
+    this.parked = false;
+    this.slamming = false;
+    this.travelDir = dir;
+    this.desiredDir = dir;
+    Input.runDir = dir;
+    this.runState = 'ramp';
+    this.rampT = 0;
+    this.rampTime = this.respawnRampTime;
+  },
+
+  _slamLanded() {
+    this.slamming = false;
+    this.squash = 0.7;
+    Camera.shake(4);
+    Particles.burst(this.x + this.w / 2, this.y + this.h, 10, 160, Tokens.rgba(Tokens.color.dust, 0.6), 0.3);
+  },
+
   // Spin-out: spit the wheel forward and spray.
   _doSpinAttack() {
     this.spinAttackDir = this.travelDir;
@@ -1127,6 +1224,19 @@ const Player = {
         dir * (170 + Math.random() * 340), -(10 + Math.random() * 260),
         pal[i % pal.length], 0.4 + Math.random() * 0.35, 4.5, true
       );
+    }
+  },
+
+  // The down spray, every piece as lethal as the forward one: on the ground it
+  // splashes out low both ways; in the air it rains straight down.
+  _downSpray() {
+    const pal = Tokens.color.carnival;
+    const ox = this.x + this.w / 2, oy = this.y + this.h - this.wheelRadius;
+    for (let i = 0; i < 28; i++) {
+      const side = i % 2 ? 1 : -1;
+      const vx = this.grounded ? side * (120 + Math.random() * 280) : side * Math.random() * 160;
+      const vy = this.grounded ? -(20 + Math.random() * 180) : 200 + Math.random() * 300;
+      Particles.emit(ox, oy, vx, vy, pal[i % pal.length], 0.4 + Math.random() * 0.35, 4.5, true);
     }
   },
 

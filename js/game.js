@@ -15,7 +15,9 @@ const Game = {
   totalDeaths: 0,
   totalGems: 0,
   objectiveTimer: 0,       // the level's goal line shows while > 0 (start of level, or bumping a lock)
-  objective: null,         // the goal line now: the map's, then each of its `lessons` on the way past
+  objective: null,         // the line showing now: the map's, then each of its `lessons` on the way past
+  goalLine: null,          // the goal itself, which a lock bump shows again (a `tip` lesson doesn't replace it)
+  lessonsSeen: null,
 
   // Save data, one record per level NAME, so levels can be added, merged and
   // reordered without scrambling anyone's progress. A level you've retired
@@ -142,8 +144,9 @@ const Game = {
     Player.spawn(Level.spawnX, Level.spawnY);
     Player.deathCount = 0;
     this.levelTimer = 0;
-    this.objective = Level.maps[index].objective;
+    this.objective = this.goalLine = Level.maps[index].objective;
     this.objectiveTimer = this.objective ? 6 : 0;
+    this.lessonsSeen = new Set();
     Camera.snapToPlayer();
     // Store total collectibles for save data
     this.levelRecord(index).totalGems = Level.totalCollectibles;
@@ -327,8 +330,11 @@ const Game = {
     }
 
     for (const lesson of Level.maps[this.currentLevel].lessons || []) {
-      if (this.objective !== lesson.objective && Player.x >= lesson.col * Level.tileSize) {
+      if (!this.lessonsSeen.has(lesson) && Player.x >= lesson.col * Level.tileSize &&
+          (lesson.row == null || Player.y < lesson.row * Level.tileSize)) {
+        this.lessonsSeen.add(lesson);
         this.objective = lesson.objective;
+        if (!lesson.tip) this.goalLine = lesson.objective;
         this.objectiveTimer = 6;
       }
     }
@@ -338,6 +344,7 @@ const Game = {
     const touch = { x: Player.x - 2, y: Player.y, w: Player.w + 4, h: Player.h };
     if ((Level.goalLocked && Level.getGoals().some(g => aabb(touch, Level.near(g)))) ||
         (Level.bridgeSpan.length && !Level.bridgeOpen && Level.tiles.some(t => t.bridge && aabb(touch, t)))) {
+      this.objective = this.goalLine;
       this.objectiveTimer = Math.max(this.objectiveTimer, 2.5);
     }
 
@@ -699,7 +706,12 @@ const Game = {
       const a = Math.min(1, this.objectiveTimer);
       ctx.textAlign = 'center';
       ctx.font = Tokens.font.md;
-      const w = ctx.measureText(objective[0]).width + 32;
+      let w = ctx.measureText(objective[0]).width + 32;
+      if (objective[1]) {
+        ctx.font = Tokens.font.xs;
+        w = Math.max(w, ctx.measureText(Layout.hint(objective[1])).width + 32);
+        ctx.font = Tokens.font.md;
+      }
       ctx.globalAlpha = a * 0.85;
       this._panel(ctx, Engine.width / 2 - w / 2, 60, w, objective[1] ? 46 : 28);
       ctx.globalAlpha = 1;

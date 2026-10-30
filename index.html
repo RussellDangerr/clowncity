@@ -120,7 +120,8 @@
       -webkit-touch-callout: none;
     }
     .deck-row { flex: 1; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-    .deck-arrows { display: flex; gap: 14px; }
+    .deck-arrows { display: flex; gap: 10px; }
+    .deck-arrows .deck-btn { width: 62px; height: 62px; font-size: 22px; }
     .deck-btn {
       width: 76px; height: 76px; border-radius: 50%;
       font-family: 'Silkscreen', monospace; font-weight: 700; font-size: 26px;
@@ -133,7 +134,7 @@
       transition: transform .06s ease;
     }
     .deck-btn.down { transform: scale(0.92); background: var(--maroon); }
-    .deck-jump { width: 112px; height: 112px; font-size: 18px; letter-spacing: 0.12em; }
+    .deck-jump { width: 100px; height: 100px; font-size: 18px; letter-spacing: 0.12em; }
     .deck-pause {
       align-self: flex-end; width: 64px; height: 64px; border-radius: 14px;
       font-size: 16px; background: rgba(28,8,11,0.85);
@@ -298,6 +299,7 @@
     <div class="deck-row">
       <div class="deck-arrows">
         <button class="deck-btn" id="btn-left" aria-label="Turn left">&#9664;</button>
+        <button class="deck-btn" id="btn-down" aria-label="Stop">&#9660;</button>
         <button class="deck-btn" id="btn-right" aria-label="Turn right">&#9654;</button>
       </div>
       <button class="deck-btn deck-jump" id="btn-jump" aria-label="Jump">JUMP</button>
